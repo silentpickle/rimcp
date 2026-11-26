@@ -242,7 +242,7 @@ internal static class Program
         {
             IEnumerable tools = (IEnumerable)mod.GetType("RiMCP.Shared.ToolManifest", true).GetProperty("McpTools", Static).GetValue(null);
             Dictionary<string, int> counts = tools.Cast<object>().GroupBy(tool => Field<string>(tool, "Group") ?? "(none)").ToDictionary(group => group.Key, group => group.Count());
-            var expected = new Dictionary<string, int> { { "observe", 38 }, { "diagnostics", 4 }, { "time", 2 }, { "administration", 12 }, { "orders", 3 }, { "pawnControl", 4 }, { "decisions", 3 }, { "gameSettings", 1 }, { "gameSetup", 14 } };
+            var expected = new Dictionary<string, int> { { "observe", 42 }, { "diagnostics", 4 }, { "time", 2 }, { "administration", 15 }, { "orders", 7 }, { "pawnControl", 5 }, { "decisions", 3 }, { "gameSettings", 1 }, { "gameSetup", 14 } };
             int count;
             Check(counts.Count == expected.Count && expected.All(pair => counts.TryGetValue(pair.Key, out count) && count == pair.Value),
                 "group sizes: " + string.Join(", ", counts.Select(pair => pair.Key + "=" + pair.Value).ToArray()));
@@ -2393,7 +2393,8 @@ internal static class Program
         Check(isOn("load_game") && list("ToolsOn").Count == 0, "turning its group on drops the group's exceptions");
         group("gameSettings", true);
         Check(current() == "full", "choices that amount to a preset are that preset");
-        foreach (string name in new[] { "designate", "designate_animal", "place_blueprint" })
+        // Every tool the manifest puts in Orders, so the check keeps up as tools are added.
+        foreach (string name in tools.Cast<object>().Where(each => Field<string>(each, "Group") == "orders").Select(each => Field<string>(each, "Name")).ToList())
         {
             tool(name, false);
         }
