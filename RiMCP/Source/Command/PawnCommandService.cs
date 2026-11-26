@@ -7,7 +7,7 @@ using Verse.AI.Group;
 
 namespace RiMCP.Command
 {
-    internal static class PawnCommandService
+    internal static partial class PawnCommandService
     {
         public static BridgeResponse SetDrafted(BridgeRequest request, RouteMatch route)
         {

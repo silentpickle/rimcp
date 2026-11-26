@@ -16,7 +16,7 @@ namespace RiMCP.Command
     // asked the way FloatMenuMakerMap asks it: as the current provider, for a click on the target.
     // An order replaces what the pawn is doing, as a click does, or with queue waits behind its
     // current job and earlier orders, as a shift-click does.
-    internal static class PawnOrderCommandService
+    internal static partial class PawnOrderCommandService
     {
         private enum TargetKind
         {

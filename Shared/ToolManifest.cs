@@ -267,6 +267,8 @@ namespace RiMCP.Shared
                 Put(ToolGroups.Orders, "designate-animal", "designate_animal", "Set or clear one animal's hunt, tame, or slaughter designation.", "/v1/animals/{pawnId}/designation", RequiredWithMap(Prop("pawnId", Str("Animal pawn ThingID or load id.")), Prop("action", AnimalDesignationAction())), IdempotentDestructiveMutation(), Body("mapId", "action")),
                 Put(ToolGroups.Administration, "set-animal-training", "set_animal_training", "Set desired training flags for one colony animal by TrainableDef defName.", "/v1/animals/{pawnId}/training", RequiredWithMap(Prop("pawnId", Str("Colony animal pawn ThingID or load id.")), Prop("assignments", TrainingAssignments())), IdempotentMutation(), Body("mapId", "assignments")),
                 Put(ToolGroups.Administration, "set-research-current", "set_research_project", "Set the current research project by ResearchProjectDef defName. Returns blockers that would stop it progressing, such as a missing research bench.", "/v1/research/current", RequiredOnly(Prop("projectDefName", Str("ResearchProjectDef defName."))), IdempotentMutation(), Body("projectDefName")),
+                Put(ToolGroups.Administration, "set-work-priorities", "set_work_priorities", "Set several Work-tab priorities in one call (up to 100 entries of pawnId, workType and priority 0-4), each checked as set_pawn_work_priority does. Each entry is applied, alreadySatisfied, or rejected with the reason; a rejection does not stop the rest.", "/v1/batch/work-priorities", WorkPrioritiesInput(), IdempotentMutation(), Body("mapId", "entries", "requestId")),
+                Post(ToolGroups.PawnControl, "order-pawns", "order_pawns", "Give up to 20 order_pawn orders in one call, in order, each with order_pawn's checks and result. A refused entry does not stop the rest. An item claimed by an earlier equip or wear entry is refused for later ones, so two pawns are never sent for the same item.", "/v1/batch/pawn-orders", OrderPawnsInput(), Mutation(false, true), Body("mapId", "orders", "requestId")),
                 Put(ToolGroups.Orders, "designate", "designate", "Order things by thingIds or by cell rectangles (optionally one defName): forbid, unforbid, haul, cut, harvest, chopWood, mine, deconstruct, or cancel. Uses the game's checks; each target is applied, alreadySatisfied, or rejected with the reason. haul marks things not hauled automatically; cut leaves grown trees, which chopWood fells; harvest takes ripe crops and wild plants. Unexplored cells are never mined. Acts on the map shown in game.", "/v1/designations", DesignateInput(), Mutation(true, true), Body("mapId", "kind", "thingIds", "rects", "defName")),
                 Post(ToolGroups.Orders, "smooth-walls", "smooth_walls", "Smooth natural rock walls in rectangles with the game's Smooth Walls order. Preview or submit. Construct mixed-material walls using place_blueprint.", "/v1/walls/smooth", SurfaceInput(false), IdempotentMutation(), Body("mapId", "rects", "preview", "requestId")),
                 Post(ToolGroups.Orders, "build-roof", "build_roof", "Preview or designate a Build Roof area after its structural supports are built. Colonists perform the roofing. Use get_map_view with the roof layer to check completion.", "/v1/roof/build", SurfaceInput(false), IdempotentMutation(), Body("mapId", "rects", "preview", "requestId")),
@@ -879,6 +881,30 @@ namespace RiMCP.Shared
             props["on"] = Bool("Whether the toggle should be on.");
             props["requestId"] = SafeRetry();
             return ObjectSchema(props, "buildingIds", "toggle", "on");
+        }
+
+        private static Dictionary<string, object> WorkPrioritiesInput()
+        {
+            Dictionary<string, object> props = MapProperty();
+            props["entries"] = J(F("type", "array"), F("minItems", 1), F("maxItems", 100),
+                F("items", ObjectSchema(J(
+                    F("pawnId", Str("Pawn ThingID or load id.")),
+                    F("workType", Str("WorkTypeDef defName.")),
+                    F("priority", Int("Priority from 0 to 4; 0 disables it.", 0, 4))), "pawnId", "workType", "priority")));
+            props["requestId"] = SafeRetry();
+            return ObjectSchema(props, "entries");
+        }
+
+        private static Dictionary<string, object> OrderPawnsInput()
+        {
+            Dictionary<string, object> single = OrderPawnInput();
+            Dictionary<string, object> entry = new Dictionary<string, object>((Dictionary<string, object>)single["properties"]);
+            entry.Remove("mapId");
+            entry.Remove("requestId");
+            Dictionary<string, object> props = MapProperty();
+            props["orders"] = J(F("type", "array"), F("minItems", 1), F("maxItems", 20), F("items", ObjectSchema(entry, "pawnId", "order")));
+            props["requestId"] = SafeRetry();
+            return ObjectSchema(props, "orders");
         }
 
         private static Dictionary<string, object> AdvanceTimeInput()
