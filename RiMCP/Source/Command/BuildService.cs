@@ -12,7 +12,7 @@ namespace RiMCP.Command
     // Buildings: checking where one fits, which changes nothing, and placing blueprints for
     // colonists to build. Both use the game's build tool through BuildPlacement, which works on the
     // map shown in game.
-    internal static class BuildService
+    internal static partial class BuildService
     {
         private const int MaxPlacements = 50;
         private const int MaxCheckSide = 20;
@@ -116,25 +116,28 @@ namespace RiMCP.Command
             CommandUtil.RequireCurrentMap(context);
             Map map = context.Map;
 
+            bool compact = body.Placements.Any(p => p != null && p.Shape != null);
+            var rooms = body.Placements.Where(p => p != null && p.Shape == "perimeter").ToArray();
+            body.Placements = Expand(body.Placements);
             // Every placement is read before any is placed, so a malformed one changes nothing.
             BuildPlacement[] buildings = new BuildPlacement[body.Placements.Length];
-            for (int i = 0; i < buildings.Length; i++)
+            foreach (var group in body.Placements.Select((p, index) => new { p, index })
+                .GroupBy(item => new { item.p.Def, item.p.Stuff, item.p.Rotation }))
             {
-                PlacementBody placement = body.Placements[i];
-                string field = "placements[" + i + "].";
-                if (placement == null || !placement.X.HasValue || !placement.Z.HasValue)
-                {
-                    throw new CommandException(400, "Each placement needs def, x, and z (" + field.TrimEnd('.') + ").");
-                }
-                buildings[i] = BuildPlacement.Resolve(placement.Def, placement.Stuff, placement.Rotation, field);
+                var first = group.First();
+                var resolved = BuildPlacement.Resolve(group.Key.Def, group.Key.Stuff, group.Key.Rotation, "placements[" + first.index + "].");
+                foreach (var item in group) buildings[item.index] = resolved;
             }
+            var plan = new BuildingPlan(buildings, body.Placements);
+            if (body.Preview)
+                return CommandEnvelope.Ok(context, false, plan.Preview(map, rooms));
             // The material counts only when given: the game's default depends on what the colony has.
-            RequestKey key = RequestKey.For("place_blueprint", requestId, map, string.Join(";", buildings.Select((building, i) =>
+            RequestKey key = RequestKey.For("place_blueprint", requestId, map, (compact ? "shape:" : "") + string.Join(";", buildings.Select((building, i) =>
                 building.Def.defName + "," + (string.IsNullOrWhiteSpace(body.Placements[i].Stuff) ? "" : building.Stuff.defName) + "," + BuildPlacement.RotationName(building.Rotation) + "," + body.Placements[i].X + "," + body.Placements[i].Z).ToArray()));
-            return CommandReceipts.Once(context, key, () => Place(buildings, body.Placements, map));
+            return CommandReceipts.Once(context, key, () => Place(buildings, body.Placements, map, plan, compact, rooms));
         }
 
-        private static CommandResult Place(BuildPlacement[] buildings, PlacementBody[] placements, Map map)
+        private static CommandResult Place(BuildPlacement[] buildings, PlacementBody[] placements, Map map, BuildingPlan plan, bool compact, PlacementBody[] rooms)
         {
             List<object> results = new List<object>();
             List<BuildPlacement> placed = new List<BuildPlacement>();
@@ -161,7 +164,7 @@ namespace RiMCP.Command
                 {
                     outcome = "alreadySatisfied";
                 }
-                else if ((reason = building.Unavailable(map) ?? building.CannotPlaceAt(cell)) != null)
+                else if ((reason = building.Unavailable(map) ?? building.CannotPlaceAt(cell) ?? plan.DoorBlocker(i, map)) != null)
                 {
                     outcome = "rejected";
                 }
@@ -191,6 +194,8 @@ namespace RiMCP.Command
                 applied += outcome == "applied" ? 1 : 0;
                 satisfied += outcome == "alreadySatisfied" ? 1 : 0;
                 rejectedCount += outcome == "rejected" ? 1 : 0;
+                if (compact && outcome != "rejected")
+                    continue;
                 results.Add(Dto.Obj(
                     Dto.Field("def", building.Def.defName),
                     Dto.Field("stuff", building.Stuff == null ? null : building.Stuff.defName),
@@ -215,6 +220,8 @@ namespace RiMCP.Command
                 Dto.Field("rejectedCount", rejectedCount),
                 Dto.Field("results", results.ToArray()),
                 Dto.Field("blockers", Blockers.ToArray(BuildPlacement.BuildBlockers(map, placed))));
+            if (rooms.Length > 0)
+                data["roofSupport"] = plan.SubmittedRoofCoverage(map, rooms);
             return new CommandResult(applied > 0, data);
         }
 
@@ -243,6 +250,8 @@ namespace RiMCP.Command
         [DataContract]
         private sealed class PlaceBlueprintBody
         {
+            [DataMember(Name = "preview")] public bool Preview { get; set; }
+
             [DataMember(Name = "mapId")]
             public string MapId { get; set; }
 
@@ -254,8 +263,23 @@ namespace RiMCP.Command
         }
 
         [DataContract]
+        private sealed class SideBody
+        {
+            [DataMember(Name = "edge")] public string Edge { get; set; }
+            [DataMember(Name = "def")] public string Def { get; set; }
+            [DataMember(Name = "stuff")] public string Stuff { get; set; }
+        }
+
+        [DataContract]
         private sealed class PlacementBody
         {
+            [DataMember(Name = "shape")] public string Shape { get; set; }
+            [DataMember(Name = "width")] public int? Width { get; set; }
+            [DataMember(Name = "height")] public int? Height { get; set; }
+            [DataMember(Name = "openings")] public CellRectBody[] Openings { get; set; }
+            [DataMember(Name = "sides")] public SideBody[] Sides { get; set; }
+            [DataMember(Name = "columns")] public bool Columns { get; set; }
+
             [DataMember(Name = "def")]
             public string Def { get; set; }
 

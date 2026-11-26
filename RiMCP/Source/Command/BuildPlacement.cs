@@ -134,7 +134,7 @@ namespace RiMCP.Command
             foreach (Thing thing in cell.GetThingList(map))
             {
                 bool sameDef = thing.def == Def || ((thing is Blueprint || thing is Frame) && thing.def.entityDefToBuild == Def);
-                if (sameDef && thing.Position == cell && thing.Rotation == Rotation && MaterialOf(thing) == Stuff)
+                if (sameDef && thing.Position == cell && (thing.Rotation == Rotation || (Def.IsDoor && Def.Size == IntVec2.One)) && MaterialOf(thing) == Stuff)
                 {
                     return thing;
                 }

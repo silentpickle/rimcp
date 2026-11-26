@@ -249,7 +249,7 @@ namespace RiMCP.Shared
                 Post(ToolGroups.Administration, "set-building-toggle", "set_building_toggle", "Turn one of the game's building toggles on or off (gizmo and revision from list_gizmos), such as a power switch, a door held open, a medical bed, or a turret's hold fire. A power switch changes once a colonist flicks it; pending says so.", "/v1/buildings/{buildingId}/toggles", SetBuildingToggleInput(), IdempotentMutation(), Body("mapId", "gizmo", "revision", "on", "requestId")),
                 Post(ToolGroups.PawnControl, "use-gizmo", "use_gizmo", "Press a button from list_gizmos (gizmo and revision) as a click does: an action, a toggle on a pawn or from a mod (on), or a target button with targetId or x and z, and destinationX and destinationZ for a two-step ability, checked with the button's own rules before it is given. dialogs has any question that follows, for answer_dialog.", "/v1/things/{thingId}/gizmos", UseGizmoInput(), Mutation(false, true), Body("mapId", "gizmo", "revision", "on", "targetId", "x", "z", "destinationX", "destinationZ", "requestId")),
                 Get(ToolGroups.Observe, "events", "get_events", "What the game is telling the player: alerts (with culprits: the pawns, things, or places they concern, up to 10 of culpritCount), letters waiting (text, expiry, quest, and a choice letter's options), and the History tab's letters and messages. Without since, history has the latest entries; with since (history.cursor from the last call), the entries after it, oldest first, with more if another page follows. repeated lists messages the game repeated since; reset means since was from another load, and incomplete that some entries may have been dropped. detail=normal adds alert explanations and letter texts in history.", "/v1/events", ObjectSchema(J(F("since", Str("history.cursor from the previous call.")), F("limit", Int("History entries; defaults to 20.", 1, 100)), F("detail", EnumString("Defaults to summary.", "summary", "normal", "full")))), "since"),
-                Get(ToolGroups.Observe, "buildings", "list_buildings", "Colony buildings, compact by default; detail=normal adds size, passability, power, battery, fuel, and billGiver. category filters by production, power, bed, storage, or a defName substring; include=[\"contents\"] adds storage contents.", "/v1/buildings", Input(MapId(), Detail(), Include("contents"), Limit(), Cursor(), Prop("category", BuildingCategory())), "category"),
+                Get(ToolGroups.Observe, "buildings", "list_buildings", "Colony buildings, compact by default; detail=normal adds size, passability, power, battery, fuel, and billGiver. category filters by production, power, bed, storage, or a defName substring; include=[\"contents\"] adds storage contents.", "/v1/buildings", Input(MapId(), Detail(), Include("contents"), Limit(), Cursor(), Prop("category", BuildingCategory()), Prop("defNames", BuildingDefs()), Prop("excludeDefs", BuildingDefs()), Prop("x", Int("West edge of building anchor rectangle.", 0, 1000)), Prop("z", Int("South edge.", 0, 1000)), Prop("width", Int("Rectangle width.", 1, 1001)), Prop("height", Int("Rectangle height.", 1, 1001))), "category", "defNames", "excludeDefs", "x", "z", "width", "height"),
                 Get(ToolGroups.Observe, "building", "get_building", "One building by ThingID or load id: size, passability, power, fuel, bills, storage contents, and a pen marker's enclosure and nutrition.", "/v1/buildings/{id}", Required(Prop("id", Str("Building ThingID or load id from list_buildings.")), MapId())),
                 Get(ToolGroups.Observe, "preview-rescue", "preview_rescue", "Preview the game's rescue option for a rescuer and patient on the shown map, including the bed and its ambient temperature.", "/v1/pawns/{pawnId}/rescue", RequiredWithMap(Prop("pawnId", Str("Player rescuer's ThingID or load id.")), Prop("targetId", Str("Downed patient's ThingID or load id."))), "targetId"),
                 Get(ToolGroups.Observe, "plants", "list_plants", "Visible plants with cell, growth, harvestability, yield availability, base yield and designations. Use x and z for nearest-first, radius=0 for one cell, and canYield=true for productive harvest targets. Use returned ids with designate.", "/v1/plants", Input(MapId(), Limit(), Cursor(), IdsOnly(), Prop("def", Str("Exact plant ThingDef name.")), Prop("harvestable", Bool("Filter by current harvestability.")), Prop("canYield", Bool("Filter by whether the plant can yield a product now.")), Prop("tree", Bool("Filter by the game's tree flag.")), Prop("stump", Bool("Use false to exclude tree stumps.")), Prop("x", Int("Cell x.", 0, 1000)), Prop("z", Int("Cell z.", 0, 1000)), Prop("radius", Int("Maximum cell distance from x and z.", 0, 1500))), "def", "harvestable", "canYield", "tree", "stump", "x", "z", "radius"),
@@ -266,7 +266,10 @@ namespace RiMCP.Shared
                 Put(ToolGroups.Administration, "set-animal-training", "set_animal_training", "Set desired training flags for one colony animal by TrainableDef defName.", "/v1/animals/{pawnId}/training", RequiredWithMap(Prop("pawnId", Str("Colony animal pawn ThingID or load id.")), Prop("assignments", TrainingAssignments())), IdempotentMutation(), Body("mapId", "assignments")),
                 Put(ToolGroups.Administration, "set-research-current", "set_research_project", "Set the current research project by ResearchProjectDef defName. Returns blockers that would stop it progressing, such as a missing research bench.", "/v1/research/current", RequiredOnly(Prop("projectDefName", Str("ResearchProjectDef defName."))), IdempotentMutation(), Body("projectDefName")),
                 Put(ToolGroups.Orders, "designate", "designate", "Order things by thingIds or by cell rectangles (optionally one defName): forbid, unforbid, haul, cut, harvest, chopWood, mine, deconstruct, or cancel. Uses the game's checks; each target is applied, alreadySatisfied, or rejected with the reason. haul marks things not hauled automatically; cut leaves grown trees, which chopWood fells; harvest takes ripe crops and wild plants. Unexplored cells are never mined. Acts on the map shown in game.", "/v1/designations", DesignateInput(), Mutation(true, true), Body("mapId", "kind", "thingIds", "rects", "defName")),
-                Post(ToolGroups.Orders, "place-blueprint", "place_blueprint", "Place up to 50 blueprints (def, optional stuff and rotation, at x and z) with the game's build tool, so research and placement rules apply. Each is applied, alreadySatisfied (with what is there: blueprint, frame, or built), or rejected with the reason; blockers lists missing materials or builders. check_placement finds spots. Acts on the map shown in game.", "/v1/blueprints", PlaceBlueprintInput(), IdempotentMutation(), Body("mapId", "placements", "requestId")),
+                Post(ToolGroups.Orders, "smooth-walls", "smooth_walls", "Smooth natural rock walls in rectangles with the game's Smooth Walls order. Preview or submit. Construct mixed-material walls using place_blueprint.", "/v1/walls/smooth", SurfaceInput(false), IdempotentMutation(), Body("mapId", "rects", "preview", "requestId")),
+                Post(ToolGroups.Orders, "build-roof", "build_roof", "Preview or designate a Build Roof area after its structural supports are built. Colonists perform the roofing. Use get_map_view with the roof layer to check completion.", "/v1/roof/build", SurfaceInput(false), IdempotentMutation(), Body("mapId", "rects", "preview", "requestId")),
+                Post(ToolGroups.Orders, "place-floor", "place_floor", "Lay floors, smooth natural stone, or mix finishes in a single request using sections. Reports new cells, existing floors or plans, and refusals.", "/v1/floors", SurfaceInput(true), IdempotentMutation(), Body("mapId", "def", "smooth", "rects", "sections", "preview", "requestId")),
+                Post(ToolGroups.Orders, "place-blueprint", "place_blueprint", "Preview or place up to 50 entries (individual buildings, straight lines or rectangular perimeters), up to 256 expanded placements, with the game's build tool, so research and placement rules apply. Each is applied, alreadySatisfied (with what is there: blueprint, frame, or built), or rejected with the reason; blockers lists missing materials or builders. check_placement finds spots. Acts on the map shown in game.", "/v1/blueprints", PlaceBlueprintInput(), IdempotentMutation(), Body("mapId", "placements", "preview", "requestId")),
                 Put(ToolGroups.Administration, "set-zone", "set_zone", "Create (kind and add, with requestId), grow, shrink, rename, or delete (by zoneId) a stockpile or growing zone. Cells are checked as the game's zone tools do; rejected cells are listed with reasons. A zone grows only into touching cells and keeps its connected part after removals. set_storage changes what a stockpile takes. Acts on the map shown in game.", "/v1/zones", SetZoneInput(), Mutation(false, true), Body("mapId", "zoneId", "kind", "add", "remove", "delete", "label", "requestId")),
                 Put(ToolGroups.Administration, "set-storage", "set_storage", "Set a stockpile's or storage building's priority and what it accepts. allow and disallow take category or thing names (such as FoodMeals or MealSimple), after allowAll or disallowAll; each entry is applied, alreadySatisfied, or rejected. Special filters (such as AllowRotten) change only when named; specialFiltersOff lists those still refusing part of an allowed entry, and fixedSpecialFiltersOff those the building refuses whatever its settings. accepts summarises the result as list_zones does.", "/v1/storage", SetStorageInput(), IdempotentMutation(), Body("mapId", "zoneId", "buildingId", "priority", "allowAll", "disallowAll", "allow", "disallow")),
                 Put(ToolGroups.Administration, "set-growing-zone", "set_growing_zone", "Set a growing zone's crop (one the game's crop menu offers) and whether to sow it and cut other plants. Returns its growing state: sowableCells, sown, harvestable, averageGrowth, notGrowing with reasons (resting is the normal night rest, about 19:00 to 6:00; tooDark; temperature; other), and blockers such as noPlantableCells, outOfSeason, or noGrower.", "/v1/growing", SetGrowingZoneInput(), IdempotentMutation(), Body("mapId", "zoneId", "plant", "allowSow", "allowCut")),
@@ -787,6 +790,28 @@ namespace RiMCP.Shared
             return ObjectSchema(props, "zoneId");
         }
 
+        private static Dictionary<string, object> SurfaceInput(bool floor)
+        {
+            var props = MapProperty();
+            if (floor)
+            {
+                props["def"] = Str("Buildable floor TerrainDef such as WoodPlankFloor. Supply def or smooth:true.");
+                props["smooth"] = Bool("Smooth exposed natural stone in place.");
+                props["sections"] = J(F("type", "array"), F("minItems", 1), F("maxItems", 50),
+                    F("description", "For mixed floors, use non-overlapping sections instead of top-level def, smooth and rects."),
+                    F("items", ObjectSchema(J(F("def", props["def"]), F("smooth", props["smooth"]), F("rects", CellRects("Cells receiving this finish."))), "rects")));
+            }
+            props["rects"] = CellRects("Rectangles extending east and north from x and z.");
+            props["preview"] = Bool("Check cells without designating construction.");
+            props["requestId"] = RequestIdProperty();
+            return floor ? ObjectSchema(props) : ObjectSchema(props, "rects");
+        }
+
+        private static Dictionary<string, object> BuildingDefs()
+        {
+            return J(F("type", "array"), F("items", Str("Exact building defName.")));
+        }
+
         private static Dictionary<string, object> PlaceBlueprintInput()
         {
             Dictionary<string, object> props = MapProperty();
@@ -802,9 +827,19 @@ namespace RiMCP.Shared
                         F("stuff", Str("Material defName for buildings made from one, such as WoodLog, Steel, or BlocksGranite. Defaults to the game's choice.")),
                         F("x", Int("Position x.", 0, 1000)),
                         F("z", Int("Position z.", 0, 1000)),
+                        F("shape", EnumString("Omit for one building. A line has one dimension equal to 1. A perimeter needs both dimensions at least 3.", "line", "perimeter")),
+                        F("width", Int("Outside width extending east from x.", 1, 60)),
+                        F("height", Int("Outside height extending north from z.", 1, 60)),
+                        F("openings", J(F("type", "array"), F("description", "Boundary cells to leave empty. Add a separate Door placement at an opening to fill it."), F("items", ObjectSchema(J(F("x", Int("Absolute x.", 0, 1000)), F("z", Int("Absolute z.", 0, 1000))), "x", "z")))),
+                        F("sides", J(F("type", "array"), F("maxItems", 4),
+                            F("description", "Override perimeter edges. North/south overrides win at shared corners. Openings always stay open."),
+                            F("items", ObjectSchema(J(F("edge", EnumString("Edge to override.", "north", "south", "east", "west")),
+                                F("def", Str("Optional alternative building defName.")), F("stuff", Str("Material for this edge."))), "edge")))),
+                        F("columns", Bool("For a perimeter, add interior roof columns on a grid using its material where the walls alone cannot hold the roof (both interior dimensions above 12). Preview their positions first.")),
                         F("rotation", EnumString("Facing. Defaults to the building's usual facing.", "north", "east", "south", "west")))),
                     F("required", A("def", "x", "z")),
                     F("additionalProperties", false))));
+            props["preview"] = Bool("Check against the current map and request, returning footprint, projected material cost, columns and exceptions without placing anything.");
             props["requestId"] = J(F("type", "string"), F("maxLength", 100), F("description", "Optional id for safe retries: a repeat returns the original result." + RetryWindow));
             return ObjectSchema(props, "placements");
         }
@@ -959,6 +994,8 @@ namespace RiMCP.Shared
         private static Dictionary<string, object> Input(params ToolProperty[] properties)
         {
             return Input(null, properties);
+        }
+
         private static Dictionary<string, object> CaravanRouteInput(bool write)
         {
             string[] required = write ? new[] { "id", "targetId", "action", "expectedLoadId" } : new[] { "id", "targetId", "action" };

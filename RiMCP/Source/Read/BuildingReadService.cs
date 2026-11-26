@@ -15,9 +15,24 @@ namespace RiMCP.Read
 
             string category = context.Request.Get("category");
             string normalizedCategory = string.IsNullOrWhiteSpace(category) ? null : category.ToLowerInvariant();
+            ReadRequest query = context.Request;
+            var included = new HashSet<ThingDef>(query.DefList<ThingDef>("defNames"));
+            var excluded = new HashSet<ThingDef>(query.DefList<ThingDef>("excludeDefs"));
+            int? x = query.OptionalInt("x"), z = query.OptionalInt("z");
+            int? width = query.OptionalInt("width"), height = query.OptionalInt("height");
+            CellRect? rect = null;
+            if (x.HasValue || z.HasValue || width.HasValue || height.HasValue)
+            {
+                if (!x.HasValue || !z.HasValue || !width.HasValue || !height.HasValue ||
+                    x < 0 || z < 0 || x > 1000 || z > 1000 || width < 1 || height < 1 || width > 1001 || height > 1001)
+                    throw new BridgeException(400, "Supply x, z, width and height for the building rectangle.");
+                rect = new CellRect(x.Value, z.Value, width.Value, height.Value);
+            }
             // Ordinal and numeric sort keys avoid culture-aware string comparison across every
             // colony building, walls and conduits included, on each page.
             IEnumerable<Building> source = context.Map.listerBuildings.allBuildingsColonist
+                .Where(building => (included.Count == 0 || included.Contains(building.def)) && !excluded.Contains(building.def))
+                .Where(building => !rect.HasValue || rect.Value.Contains(building.Position))
                 .Where(building => MatchesCategory(building, normalizedCategory))
                 .OrderBy(building => building.def.defName, StringComparer.Ordinal)
                 .ThenBy(building => building.thingIDNumber);
@@ -102,7 +117,7 @@ namespace RiMCP.Read
             return building.def.defName.IndexOf(normalized, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        private static object SerializeBuilding(Building building, ReadDetail detail, bool includeContents)
+        private static Dictionary<string, object> SerializeBuilding(Building building, ReadDetail detail, bool includeContents)
         {
             Dictionary<string, object> dto = SummaryDto.ThingWithPosition(building);
             dto["hitPoints"] = building.HitPoints;

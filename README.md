@@ -68,6 +68,44 @@ or removal from the world map. Read the map and party after the stop. The game
 UI handles formation, reforming after an encounter, trading, and attacks that
 require the game's friendly-faction confirmation.
 
+## Plan and furnish a room
+
+Send this to `place_blueprint` with the current `expectedLoadId`. Preview first. For submission, remove `preview` and add a fresh `requestId`.
+
+```json
+{
+  "preview": true,
+  "placements": [
+    {
+      "shape": "perimeter", "def": "Wall", "stuff": "WoodLog",
+      "x": 100, "z": 100, "width": 20, "height": 20,
+      "sides": [{"edge": "north", "stuff": "BlocksGranite"}],
+      "openings": [{"x": 110, "z": 100}], "columns": true
+    },
+    {"def": "Door", "stuff": "WoodLog", "x": 110, "z": 100},
+    {"def": "Bed", "stuff": "WoodLog", "x": 105, "z": 110}
+  ]
+}
+```
+
+Dimensions are outside dimensions. This example encloses 18×18 cells. Each side may override its building definition and material. North and south overrides take precedence at corners. For a shorter accent segment, reserve its cells as openings and add a line with its own def, material, origin and width or height. A straight conduit uses the same line shape. A request can contain 50 entries and 256 expanded placements. A compact submission reports individual refusals and aggregate outcomes. Placement can succeed partially.
+
+A single-cell door needs two opposite walkable approaches. The check includes existing obstacles, blueprints, frames, and impassable footprints in the request. The roof report counts interior cells outside the game’s support radius and shows example coordinates. Optional columns use a regular grid. Hand-place columns for a different layout. Once the supports are built, call `build_roof` with `{"rects":[{"x":100,"z":100,"width":20,"height":20}]}`. This orders colonists to build the roof, including over the perimeter. Large rooms can require this explicit order. Check `get_map_view(layers=["roof"])` for actual coverage.
+
+Use `place_floor` for a single finish (`def` and `rects`) or a mixed floor plan. Each section in the example below is independent. Change the coordinates to suit the map. Smoothing uses the exposed rock already on the selected cells. The preview gives the material estimate for new construction and reasons for unsuitable cells.
+
+```json
+{
+  "preview": true,
+  "sections": [
+    {"def": "WoodPlankFloor", "rects": [{"x": 101, "z": 101, "width": 8, "height": 6}]},
+    {"def": "PavedTile", "rects": [{"x": 109, "z": 101, "width": 2, "height": 6}]},
+    {"smooth": true, "rects": [{"x": 111, "z": 101, "width": 3, "height": 6}]}
+  ]
+}
+```
+
+Use `smooth_walls` with rectangles for exposed natural rock walls. Use `list_buildings` with `defNames:["Bed"]` and `x,z,width,height` to get finished beds anchored inside the room. `excludeDefs:["Wall"]` omits walls before pagination.
 
 ## Using The Mod
 
