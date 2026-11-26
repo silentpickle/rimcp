@@ -19,6 +19,20 @@ include `Assembly-CSharp.dll` and the corresponding Unity managed dependencies.
 The harness intentionally does not run against 1.7's .NET 10 engine assemblies;
 live 1.7 smoke tests cover that runtime.
 
+On macOS, run the same executable with Mono (`brew install mono`), using the
+game's own managed directory:
+
+```bash
+managed="$HOME/Library/Application Support/Steam/steamapps/common/RimWorld/RimWorldMac.app/Contents/Resources/Data/Managed"
+dotnet build tests/CompatibilityRegression/CompatibilityRegression.csproj -c Release "-p:RimWorldManagedPath=$managed"
+mono tests/CompatibilityRegression/bin/Release/net472/CompatibilityRegression.exe "$managed" RiMCP/Assemblies/RiMCP.dll
+```
+
+Under Mono, the three checks that construct the game's commands fail in
+`Verse.Command`'s static constructor, which needs Unity's native runtime, and
+Mono prints a warning that its class libraries are out of sync. Every other
+check should pass.
+
 When using the repository-local dependency cache:
 
 ```powershell
@@ -27,7 +41,7 @@ $env:NUGET_PACKAGES = Join-Path $PWD '.nuget/packages'
 dotnet restore tests/CompatibilityRegression/CompatibilityRegression.csproj --source $env:NUGET_PACKAGES "-p:RimWorldManagedPath=$managed"
 ```
 
-The eighty-four checks cover:
+The eighty-five checks cover:
 
 - Main-menu research listing, definition lookup, and definition search, including
   absence of invented `finished`/`progress` values and blockers, and `availableOnly`
@@ -101,7 +115,9 @@ The eighty-four checks cover:
 - The `advance_time` run lifecycle, driven by synthetic observations: completion at
   the target tick, interruption by an outside pause or another game, stops on
   changes during the run but not on the starting state, and severity order when
-  several things happen in one frame. Observing a live game is a live-game test.
+  several things happen in one frame, and a window that forces a pause ending the
+  run with endReason dialog (`advance_dialog_blocks`). Observing a live game is a
+  live-game test.
 - `advance_time` retries recognised across recent runs, with matching arguments
   required for a reused request id.
 - `advance_time` stopping when stored food drops below the Low food threshold
