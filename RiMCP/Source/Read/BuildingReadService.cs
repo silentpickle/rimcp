@@ -42,7 +42,27 @@ namespace RiMCP.Read
                 return BridgeResponse.Error(404, "Building not found.");
             }
 
-            return ReadEnvelope.Ok(context, SerializeBuilding(building, ReadDetail.Full, true));
+            Dictionary<string, object> data = SerializeBuilding(building, ReadDetail.Full, true);
+            CompAnimalPenMarker marker = building.TryGetComp<CompAnimalPenMarker>();
+            if (marker != null && building.Spawned)
+            {
+                PenMarkerState state = marker.PenState;
+                PenFoodCalculator food = marker.PenFoodCalculator;
+                data["pen"] = Dto.Obj(
+                    Dto.Field("enclosed", state.Enclosed),
+                    Dto.Field("outsideAccess", state.HasOutsideAccess),
+                    Dto.Field("passableDoors", state.PassableDoors),
+                    Dto.Field("cells", food.numCells),
+                    Dto.Field("soilCells", food.numCellsSoil),
+                    Dto.Field("stockpiledNutrition", food.sumStockpiledNutritionAvailableNow),
+                    Dto.Field("forageNutritionPerDayToday", food.NutritionPerDayToday),
+                    Dto.Field("animalNutritionPerDay", food.SumNutritionConsumptionPerDay),
+                    Dto.Field("animals", food.ActualAnimalInfos.Where(info => info.TotalCount > 0).Select(info => Dto.Obj(
+                        Dto.Field("def", info.animalDef.defName),
+                        Dto.Field("count", info.TotalCount),
+                        Dto.Field("nutritionPerDay", info.TotalNutritionConsumptionPerDay))).ToArray()));
+            }
+            return ReadEnvelope.Ok(context, data);
         }
 
         public static Building FindBuilding(Map map, string id)

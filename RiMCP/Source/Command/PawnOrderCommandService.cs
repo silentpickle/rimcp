@@ -102,6 +102,41 @@ namespace RiMCP.Command
             }
         };
 
+        public static BridgeResponse PreviewRescue(BridgeRequest request, RouteMatch route)
+        {
+            ReadContext read = ReadContext.FromMap(request);
+            CommandContext context = CommandUtil.ContextFor(read.Request.MapId);
+            CommandUtil.RequireCurrentMap(context);
+            Pawn rescuer = CommandUtil.ResolvePlayerControlledPawn(context, route["pawnId"]);
+            PawnOrder rescue = Orders.First(order => order.Name == "rescue");
+            LocalTargetInfo target = ResolveTarget(rescue, new OrderPawnBody { TargetId = read.Request.Get("targetId") }, read.Map, rescuer);
+            Pawn patient = (Pawn)target.Thing;
+            AcceptanceReport gate = FloatMenuMakerMap.ShouldGenerateFloatMenuForPawn(rescuer);
+            string reason = gate.Accepted ? null : gate.Reason.StripTags() ?? rescue.PawnUnable;
+            Building_Bed bed = null;
+            if (gate.Accepted)
+            {
+                FloatMenuOption option = Options(rescue, rescuer, target, read.Map, out reason)?.FirstOrDefault();
+                if (option == null || option.Disabled)
+                {
+                    reason = reason ?? option?.Label.StripTags() ?? rescue.TargetUnsuitable;
+                }
+                else
+                {
+                    bed = RestUtility.FindBedFor(patient, rescuer, checkSocialProperness: false)
+                        ?? RestUtility.FindBedFor(patient, rescuer, checkSocialProperness: false, ignoreOtherReservations: true);
+                    reason = bed == null ? "No eligible rescue bed was found." : null;
+                }
+            }
+            return ReadEnvelope.Ok(read, Dto.Obj(
+                Dto.Field("rescuerId", ReadUtil.ThingId(rescuer)),
+                Dto.Field("patientId", ReadUtil.ThingId(patient)),
+                Dto.Field("patientAmbientTemperatureC", patient.AmbientTemperature),
+                Dto.Field("available", bed != null),
+                Dto.Field("reason", reason),
+                Dto.Field("rescueBed", BedSummary(bed))));
+        }
+
         public static BridgeResponse OrderPawn(BridgeRequest request, RouteMatch route)
         {
             OrderPawnBody body = CommandUtil.ReadBody<OrderPawnBody>(request);
@@ -159,6 +194,8 @@ namespace RiMCP.Command
             }
 
             Job current = pawn.CurJob;
+            Building_Bed rescueBed = order.Name == "rescue" && current?.def == JobDefOf.Rescue
+                && current.targetA.Thing == target.Thing ? current.targetB.Thing as Building_Bed : null;
             Dictionary<string, object> data = Dto.Obj(
                 Dto.Field("order", order.Name),
                 Dto.Field("queue", queue),
@@ -167,6 +204,7 @@ namespace RiMCP.Command
                 Dto.Field("outcome", outcome),
                 Dto.Field("reason", reason),
                 Dto.Field("destination", order.Target == TargetKind.Cell && current != null && current.def == JobDefOf.Goto ? Dto.Obj(Dto.Field("x", current.targetA.Cell.x), Dto.Field("z", current.targetA.Cell.z)) : null),
+                Dto.Field("rescueBed", BedSummary(rescueBed)),
                 Dto.Field("currentJob", PawnReadService.SerializeCurrentJob(pawn)),
                 Dto.Field("queuedJobs", PawnReadService.SerializeQueuedJobs(pawn)));
             if (outcome == "awaitingInput")
@@ -182,6 +220,15 @@ namespace RiMCP.Command
                 }
             }
             return new CommandResult(outcome == "jobIssued", data);
+        }
+
+        private static object BedSummary(Building_Bed bed)
+        {
+            return bed == null ? null : Dto.Obj(
+                Dto.Field("id", ReadUtil.ThingId(bed)),
+                Dto.Field("position", ReadUtil.Cell(bed.Position)),
+                Dto.Field("medical", bed.Medical),
+                Dto.Field("ambientTemperatureC", bed.AmbientTemperature));
         }
 
         private static string OrderText(string order, LocalTargetInfo target)

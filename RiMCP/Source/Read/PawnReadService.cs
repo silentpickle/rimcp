@@ -306,11 +306,28 @@ namespace RiMCP.Read
             {
                 foreach (Hediff hediff in pawn.health.hediffSet.hediffs.OrderByDescending(h => h.Severity))
                 {
+                    HediffComp_Immunizable immunity = hediff.TryGetComp<HediffComp_Immunizable>();
+                    HediffComp_TendDuration tend = hediff.TryGetComp<HediffComp_TendDuration>();
+                    bool canTend = !pawn.Dead && hediff.TendableNow();
+                    int? nextTendTicks = canTend ? 0 : (int?)null;
+                    if (!pawn.Dead && !canTend && tend != null && tend.IsTended
+                        && !tend.TProps.TendIsPermanent && hediff.TendableNow(ignoreTimer: true))
+                    {
+                        nextTendTicks = Math.Max(1, tend.tendTicksLeft - tend.TProps.TendTicksOverlap + 1);
+                    }
                     hediffs.Add(Dto.Obj(
                         Dto.Field("defName", hediff.def == null ? null : hediff.def.defName),
                         Dto.Field("label", hediff.LabelCap),
                         Dto.Field("severity", hediff.Severity),
-                        Dto.Field("part", hediff.Part == null ? null : hediff.Part.LabelCap)));
+                        Dto.Field("part", hediff.Part == null ? null : hediff.Part.LabelCap),
+                        Dto.Field("immunity", immunity?.Immunity),
+                        // Chronic conditions such as asthma reuse the immunity component with no gain,
+                        // so a raw 0 there is not an infection losing a race.
+                        Dto.Field("immunityRises", immunity == null ? (bool?)null : immunity.Props.immunityPerDaySick > 0f),
+                        Dto.Field("needsTend", canTend),
+                        Dto.Field("tended", tend?.IsTended),
+                        Dto.Field("tendQuality", tend != null && tend.IsTended ? tend.tendQuality : (float?)null),
+                        Dto.Field("nextTendTicks", nextTendTicks)));
                 }
             }
 
@@ -320,6 +337,33 @@ namespace RiMCP.Read
                 Dto.Field("pain", pawn.health == null || pawn.health.hediffSet == null ? 0f : pawn.health.hediffSet.PainTotal),
                 Dto.Field("summaryHealthPercent", pawn.health == null || pawn.health.summaryHealth == null ? 0f : pawn.health.summaryHealth.SummaryHealthPercent),
                 Dto.Field("hediffs", hediffs));
+
+            if (pawn.health?.hediffSet != null)
+            {
+                float bleedRate = pawn.health.hediffSet.BleedRateTotal;
+                health["bleedRatePerDay"] = bleedRate;
+                if (!pawn.Dead && bleedRate > 0f
+                    && !(ModsConfig.BiotechActive && pawn.genes != null && pawn.genes.HasActiveGene(GeneDefOf.Deathless)))
+                {
+                    int ticks = HealthUtility.TicksUntilDeathDueToBloodLoss(pawn);
+                    if (ticks < int.MaxValue)
+                    {
+                        health["estimatedTicksToBleedOut"] = ticks;
+                    }
+                }
+            }
+
+            if (pawn.Spawned)
+            {
+                health["ambientTemperatureC"] = pawn.AmbientTemperature;
+                Building_Bed bed = pawn.CurrentBed();
+                if (bed != null)
+                {
+                    health["currentBed"] = Dto.Obj(
+                        Dto.Field("id", ReadUtil.ThingId(bed)),
+                        Dto.Field("medical", bed.Medical));
+                }
+            }
 
             if (detail == ReadDetail.Full && pawn.health != null && pawn.health.capacities != null)
             {
