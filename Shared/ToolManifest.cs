@@ -251,7 +251,10 @@ namespace RiMCP.Shared
                 Get(ToolGroups.Observe, "events", "get_events", "What the game is telling the player: alerts (with culprits: the pawns, things, or places they concern, up to 10 of culpritCount), letters waiting (text, expiry, quest, and a choice letter's options), and the History tab's letters and messages. Without since, history has the latest entries; with since (history.cursor from the last call), the entries after it, oldest first, with more if another page follows. repeated lists messages the game repeated since; reset means since was from another load, and incomplete that some entries may have been dropped. detail=normal adds alert explanations and letter texts in history.", "/v1/events", ObjectSchema(J(F("since", Str("history.cursor from the previous call.")), F("limit", Int("History entries; defaults to 20.", 1, 100)), F("detail", EnumString("Defaults to summary.", "summary", "normal", "full")))), "since"),
                 Get(ToolGroups.Observe, "buildings", "list_buildings", "Colony buildings, compact by default; detail=normal adds size, passability, power, battery, fuel, and billGiver. category filters by production, power, bed, storage, or a defName substring; include=[\"contents\"] adds storage contents.", "/v1/buildings", Input(MapId(), Detail(), Include("contents"), Limit(), Cursor(), Prop("category", BuildingCategory())), "category"),
                 Get(ToolGroups.Observe, "building", "get_building", "One building by ThingID or load id: size, passability, power, fuel, bills, and storage contents.", "/v1/buildings/{id}", Required(Prop("id", Str("Building ThingID or load id from list_buildings.")), MapId())),
-                Get(ToolGroups.Observe, "world", "list_world", "List world-level context: factions and world objects.", "/v1/world", Input(Limit(), Cursor())),
+                Get(ToolGroups.Observe, "world", "list_world", "List factions and world objects. Filter objects by kind for campaign planning.", "/v1/world", Input(Limit(), Cursor(), Prop("kind", EnumString("Optional world object filter.", "settlement", "hostileSettlement", "home", "site"))), "kind"),
+                Get(ToolGroups.Observe, "caravans", "list_caravans", "Player caravans on the world map with members, current route, movement blockers, food estimate, and mass. include=[\"inventory\"] adds cargo counts.", "/v1/caravans", Input(Include("inventory"), Limit(), Cursor())),
+                Get(ToolGroups.Observe, "preview-caravan-route", "preview_caravan_route", "Check an existing caravan's route to a world object. Returns game acceptance and estimated travel ticks from the current tile.", "/v1/caravans/{id}/route", CaravanRouteInput(false), "targetId", "action"),
+                Put(ToolGroups.Orders, "set-caravan-route", "set_caravan_route", "Order an existing caravan to enter a loaded map, visit a settlement or site, or attack an already-hostile settlement on the same surface layer. Rechecks the route. Pass requestId for safe retries.", "/v1/caravans/{id}/route", CaravanRouteInput(true), Mutation(true, true), Body("targetId", "action", "requestId")),
                 Get(ToolGroups.Observe, "defs-search", "search_defs", "Search loaded defs by kind (any Def type without the Def suffix, aliases such as research, or all), query, and category. sourceMod is the defining mod, not later patchers.", "/v1/defs/search", Input(Limit(), Cursor(), Prop("kind",DefKind()), Prop("query", Str("Search text for defName, label, or description.")), Prop("category", Str("Optional category filter."))), "kind", "query", "category"),
                 Get(ToolGroups.Observe, "def", "get_def", "One def by defName, optionally of a kind as in search_defs. sourceMod is the defining mod, not later patchers.", "/v1/defs/{defName}", Required(Prop("defName", Str("Def name to retrieve.")), Prop("kind", DefKind())), "kind"),
                 Put(ToolGroups.PawnControl, "set-pawn-drafted", "set_pawn_drafted", "Draft or undraft one player-controlled pawn by ThingID or load id.", "/v1/pawns/{pawnId}/drafted", RequiredWithMap(Prop("pawnId", Str("Pawn ThingID or load id.")), Prop("drafted", Bool("Whether the pawn should be drafted."))), IdempotentMutation(), Body("mapId", "drafted")),
@@ -836,8 +839,8 @@ namespace RiMCP.Shared
                 F("speed", EnumString("Speed while running. Defaults to Superfast. The game still drops to normal speed during danger, as it does for players. Ultrafast needs development mode.", "Normal", "Fast", "Superfast", "Ultrafast")),
                 F("stopOn", J(
                     F("type", "array"),
-                    F("items", EnumString("Condition.", "death", "downed", "injured", "mentalBreak", "hostiles", "lowFood", "threatLetter", "letter")),
-                    F("description", "Conditions that end the run early and pause. Defaults to death, downed, injured (new injury or bleeding), mentalBreak, hostiles (a visible hostile threat appears), lowFood (stored food drops below the game's Low food threshold of 4 nutrition per colonist), and threatLetter. letter stops on any letter. An empty list runs to the end. Checked every frame; lowFood every 250 ticks."))),
+                    F("items", EnumString("Condition.", "death", "downed", "injured", "mentalBreak", "hostiles", "lowFood", "threatLetter", "caravanRouteEnded", "letter")),
+                    F("description", "Conditions that end the run early and pause. Defaults to death, downed, injured (new injury or bleeding), mentalBreak, hostiles (a visible hostile threat appears), lowFood (stored food drops below the game's Low food threshold of 4 nutrition per colonist), and threatLetter. caravanRouteEnded stops when a player caravan loses its route or leaves the world map. letter stops on any letter. An empty list runs to the end. Checked every frame; lowFood every 250 ticks."))),
                 F("requestId", J(F("type", "string"), F("maxLength", 100), F("description", "Optional id for safe retries: a repeat with the same id returns the existing run."))),
                 F("waitSeconds", WaitSeconds())),
                 "hours");
@@ -954,6 +957,18 @@ namespace RiMCP.Shared
         private static Dictionary<string, object> Input(params ToolProperty[] properties)
         {
             return Input(null, properties);
+        private static Dictionary<string, object> CaravanRouteInput(bool write)
+        {
+            string[] required = write ? new[] { "id", "targetId", "action", "expectedLoadId" } : new[] { "id", "targetId", "action" };
+            var schema = Input(required,
+                Prop("id", Int("Caravan id from list_caravans.", 0, int.MaxValue)),
+                Prop("targetId", Int("World object id from list_world.", 0, int.MaxValue)),
+                Prop("action", EnumString("What the caravan should do on arrival.", "enter", "visit", "visitSite", "attack")));
+            if (write)
+            {
+                ((Dictionary<string, object>)schema["properties"])["requestId"] = SafeRetry();
+            }
+            return schema;
         }
 
         private static Dictionary<string, object> Required(ToolProperty requiredProperty, params ToolProperty[] optionalProperties)

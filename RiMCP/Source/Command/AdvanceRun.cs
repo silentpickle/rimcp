@@ -41,6 +41,7 @@ namespace RiMCP.Command
         public string LowFood;
         public readonly Dictionary<string, ColonistState> Colonists = new Dictionary<string, ColonistState>();
         public readonly Dictionary<int, LetterState> Letters = new Dictionary<int, LetterState>();
+        public readonly Dictionary<int, string> MovingCaravans = new Dictionary<int, string>();
     }
 
     internal sealed class AdvanceEvent
@@ -59,7 +60,7 @@ namespace RiMCP.Command
         public const string Running = "running";
         public const int MaxEvents = 50;
         // Also the order in which simultaneous events are reported.
-        public static readonly string[] Conditions = { "death", "downed", "injured", "mentalBreak", "hostiles", "lowFood", "threatLetter", "letter" };
+        public static readonly string[] Conditions = { "death", "downed", "injured", "mentalBreak", "hostiles", "lowFood", "threatLetter", "caravanRouteEnded", "letter" };
         public static readonly string[] DefaultStopOn = { "death", "downed", "injured", "mentalBreak", "hostiles", "lowFood", "threatLetter" };
 
         public readonly int Id;
@@ -202,6 +203,7 @@ namespace RiMCP.Command
                 case "hostiles": return "hostiles";
                 case "lowFood": return "low food";
                 case "threatLetter": return "a threat letter";
+                case "caravanRouteEnded": return "a caravan route ending";
                 case "letter": return "a letter";
                 case "paused": return "the game was paused";
                 case "speedChanged": return "the speed was changed";
@@ -262,6 +264,14 @@ namespace RiMCP.Command
             if (current.LowFood != null && previous.LowFood == null)
             {
                 changes.Add(new AdvanceEvent { Kind = "lowFood", Tick = current.Tick, Detail = current.LowFood });
+            }
+            foreach (var caravan in previous.MovingCaravans.OrderBy(pair => pair.Key))
+            {
+                if (!current.MovingCaravans.ContainsKey(caravan.Key))
+                {
+                    changes.Add(new AdvanceEvent { Kind = "caravanRouteEnded", Tick = current.Tick,
+                        Detail = caravan.Value + " (world object " + caravan.Key + ")" });
+                }
             }
             foreach (LetterState letter in current.Letters.Values.OrderBy(letter => letter.Id))
             {
@@ -492,8 +502,13 @@ namespace RiMCP.Command
             observation.LowFood = lowFood;
             // Colonists who are not spawned: carried or in a container, on a caravan, watched since
             // they were spawned, and those who died since the last frame.
-            IEnumerable<Pawn> caravans = Find.WorldObjects.Caravans.Where(caravan => caravan.IsPlayerControlled).SelectMany(caravan => caravan.PawnsListForReading).Where(pawn => pawn.IsFreeColonist);
-            pawns.AddRange(held.Concat(caravans).Concat(tracked.Where(pawn => pawn.Dead || pawn.MapHeld != null)).Distinct().Where(pawn => !pawns.Contains(pawn)).ToList());
+            var caravans = Find.WorldObjects.Caravans.Where(caravan => caravan.IsPlayerControlled).ToList();
+            foreach (var caravan in caravans.Where(each => each.pather.Moving))
+            {
+                observation.MovingCaravans[caravan.ID] = caravan.LabelCap.StripTags();
+            }
+            IEnumerable<Pawn> travelers = caravans.SelectMany(caravan => caravan.PawnsListForReading).Where(pawn => pawn.IsFreeColonist);
+            pawns.AddRange(held.Concat(travelers).Concat(tracked.Where(pawn => pawn.Dead || pawn.MapHeld != null)).Distinct().Where(pawn => !pawns.Contains(pawn)).ToList());
             tracked = pawns.Where(pawn => !pawn.Dead).ToList();
 
             foreach (Pawn pawn in pawns)

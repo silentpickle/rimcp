@@ -241,11 +241,22 @@ namespace RiMCP.Read
 
         private static object SerializeWorldObjects(ReadRequest request)
         {
+            Func<WorldObject, bool> matches;
+            switch (request.Get("kind"))
+            {
+                case null: matches = obj => true; break;
+                case "settlement": matches = obj => obj is Settlement; break;
+                case "hostileSettlement": matches = obj => obj is Settlement && obj.Faction?.HostileTo(Faction.OfPlayer) == true; break;
+                case "home": matches = obj => obj is MapParent parent && parent.HasMap && parent.Map.IsPlayerHome; break;
+                case "site": matches = obj => obj is Site; break;
+                default: throw new BridgeException(400, "Field 'kind' must be settlement, hostileSettlement, home, or site.");
+            }
             if (Find.World == null || Find.WorldObjects == null)
             {
                 return new object[0];
             }
             IEnumerable<WorldObject> source = Find.WorldObjects.AllWorldObjects
+                .Where(matches)
                 .OrderBy(obj => obj.def == null ? "" : obj.def.defName, StringComparer.Ordinal)
                 .ThenBy(obj => obj.ID);
             Page<WorldObject> page = new Page<WorldObject>(source, request);
@@ -262,7 +273,9 @@ namespace RiMCP.Read
                 Dto.Field("def", ReadUtil.Def(worldObject.def)),
                 Dto.Field("label", worldObject.LabelCap),
                 Dto.Field("tile", ReadUtil.TileId(worldObject.Tile)),
-                Dto.Field("faction", worldObject.Faction == null ? null : worldObject.Faction.Name));
+                Dto.Field("faction", worldObject.Faction == null ? null : worldObject.Faction.Name),
+                Dto.Field("hostileToPlayer", worldObject.Faction?.HostileTo(Faction.OfPlayer)),
+                Dto.Field("hasMap", (worldObject as MapParent)?.HasMap));
         }
     }
 }

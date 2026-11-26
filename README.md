@@ -27,6 +27,7 @@ Current MCP tools:
 | Time | `set_game_speed`, `advance_time`, `get_advance` | Pause or set the speed, or run the game for a set time, from 25 ticks to 24 in-game hours, and pause again. A run stops early on deaths, downed or injured colonists, mental breaks, hostiles, low food, or threat letters, and reports what happened. |
 | Events and decisions | `get_events`, `list_quests`, `answer_letter`, `respond_to_quest`, `answer_dialog`, `tell_player` | See what the game is telling the player: alerts with the pawns, things, or places they concern, letters waiting with a choice letter's options, and the History tab's letters and messages, page by page from where the agent last read. Quests are listed as the Quests tab shows them, with whether each offer can be accepted, its rewards, and who can accept it. Answer letters and accept, dismiss, or restore quests through the game's own dialogs and checks; a question that follows, such as an "are you sure?", is answered page by page, and stays on screen so the player can answer it instead. Decisions show in game, and an agent can tell the player what it is doing, or send a letter when something needs a look. |
 | World and defs | `list_world`, `search_defs`, `get_def` | Inspect factions, world objects, and loaded definitions with their defining mod when known. |
+| Caravans | `list_caravans`, `preview_caravan_route`, `set_caravan_route` | Inspect parties on the world map, preview native pathing and arrival checks, and order an existing caravan to visit a settlement or site, attack an already-hostile settlement, or enter a loaded map. |
 | Sessions | `list_saves`, `save_game`, `load_game`, `leave_game`, `get_operation`, `cancel_operation` | List saves, and save, load, or return to the main menu. Each runs as an operation that keeps reporting through loads. A save counts only once verified, and replacing a loaded colony always asks for a save first or an explicit discard. |
 | New games | `list_scenarios`, `get_setup`, `start_setup`, `set_setup_storyteller`, `generate_world`, `find_starting_sites`, `choose_starting_site`, `set_setup_ideoligion`, `edit_setup_ideoligion`, `set_starting_pawns`, `start_game`, `setup_back`, `cancel_setup`, `answer_confirmation` | Set up a new colony through the game's own screens, in view: scenario, storyteller and difficulty (a preset or custom), world, starting site (searched by biome, terrain, water, climate, growing period and distance to other factions), ideoligion (classic, a preset, a saved one, or a custom fixed or fluid one, with its memes, precepts, rituals, roles, buildings and the rest edited under the screen's rules), and colonists arranged, given age and xenotype preferences, and rerolled until they meet skill, trait, work, xenotype and age criteria. Each change takes the setup revision the agent last read, a change by the player stops the agent's next step, and the player approves the start. Screens RimMCP does not drive are left to the player. |
 
@@ -51,6 +52,21 @@ Tool responses use a shared envelope:
 ```
 
 The MCP proxy mirrors the structuredContent JSON in text content for clients that do not read structured tool results yet (**cough, cough** opencode).
+
+### Caravan travel
+
+Form the party and select supplies in the game. Once the party appears in
+`list_caravans`, choose a world object from `list_world` and preview the route.
+Pass the preview's `loadId` as `expectedLoadId` and use a distinct `requestId`
+when setting the route. Travel time is an estimate from the current tile.
+Inspect the party's food, weight, and home-map state separately.
+
+For campaign travel, include `caravanRouteEnded` alongside the desired hazard
+stops in `advance_time.stopOn`. A route ending can mean arrival, cancellation,
+or removal from the world map. Read the map and party after the stop. The game
+UI handles formation, reforming after an encounter, trading, and attacks that
+require the game's friendly-faction confirmation.
+
 
 ## Using The Mod
 
