@@ -19,7 +19,7 @@ namespace RiMCP.Command
         public ActionOrigin Origin;
     }
 
-    internal static class GizmoService
+    internal static partial class GizmoService
     {
         public static BridgeResponse ListGizmos(BridgeRequest request, RouteMatch route)
         {
@@ -60,7 +60,9 @@ namespace RiMCP.Command
                 AgentLog.About("Turn " + Label(entry) + " " + onOff + " on " + AgentLog.Name(building), building);
                 Dictionary<string, object> data = Dto.Obj(Dto.Field("building", SummaryDto.Thing(building)), Dto.Field("gizmo", Label(entry)));
                 bool changed = false;
+                IntVec3 cell = building.Position;
                 Press.Execute(data, entry.Origin, "set_building_toggle", Label(entry), building, context.Map, LocalTargetInfo.Invalid, () => changed = SetToggle((Command_Toggle)entry.Command, body.On.Value, data));
+                changed |= ReportReplacement(building, cell, context.Map, Label(entry), data);
                 Pending(building, data);
                 if (changed)
                 {
@@ -125,7 +127,9 @@ namespace RiMCP.Command
             {
                 press = () => command.ProcessInput(new Event());
             }
+            IntVec3 cell = thing.PositionHeld;
             Press.Execute(data, entry.Origin, "use_gizmo", Label(entry), thing, map, aim, press);
+            changed |= ReportReplacement(thing, cell, map, Label(entry), data);
             Pending(thing, data);
             if (entry.Kind == "toggle" && standard)
             {
