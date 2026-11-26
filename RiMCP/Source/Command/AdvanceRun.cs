@@ -39,6 +39,8 @@ namespace RiMCP.Command
         public string Threat;
         // Label of a home map whose stored food is below the Low food threshold, or null.
         public string LowFood;
+        // Type names of open windows that force a pause (see BlockingWindows); empty when none.
+        public readonly List<string> Blocking = new List<string>();
         public readonly Dictionary<string, ColonistState> Colonists = new Dictionary<string, ColonistState>();
         public readonly Dictionary<int, LetterState> Letters = new Dictionary<int, LetterState>();
         public readonly Dictionary<int, string> MovingCaravans = new Dictionary<int, string>();
@@ -58,6 +60,7 @@ namespace RiMCP.Command
     internal sealed class AdvanceRun
     {
         public const string Running = "running";
+        public const string DialogReason = "dialog";
         public const int MaxEvents = 50;
         // Also the order in which simultaneous events are reported.
         public static readonly string[] Conditions = { "death", "downed", "injured", "mentalBreak", "hostiles", "lowFood", "threatLetter", "caravanRouteEnded", "letter" };
@@ -129,6 +132,12 @@ namespace RiMCP.Command
             {
                 End("completed", "completed", current.Tick);
             }
+            else if (current.Blocking.Count > 0)
+            {
+                // The clock stopped for a window while the speed stayed selected; without this the
+                // run would report running until the window closed.
+                End("interrupted", DialogReason, current.Tick);
+            }
             else if (current.Speed != Speed)
             {
                 End("interrupted", current.Speed == TimeSpeed.Paused ? "paused" : "speedChanged", current.Tick);
@@ -151,7 +160,8 @@ namespace RiMCP.Command
         // or speed change by someone else is left alone.
         public bool PausesGameAtEnd
         {
-            get { return Failed || Revoked || Status == "stopped" || Status == "completed"; }
+            // A blocking window is paused for too: when it closes, the game should not run on unwatched.
+            get { return Failed || Revoked || Status == "stopped" || Status == "completed" || EndReason == DialogReason; }
         }
 
         public void Revoke(string reason, int tick)
@@ -205,6 +215,7 @@ namespace RiMCP.Command
                 case "threatLetter": return "a threat letter";
                 case "caravanRouteEnded": return "a caravan route ending";
                 case "letter": return "a letter";
+                case DialogReason: return "a window paused the game";
                 case "paused": return "the game was paused";
                 case "speedChanged": return "the speed was changed";
                 case "gameUnloaded": return "the game was unloaded";
@@ -465,6 +476,10 @@ namespace RiMCP.Command
             {
                 Find.TickManager.Pause();
             }
+            if (run.EndReason == AdvanceRun.DialogReason)
+            {
+                BlockingWindows.Adopt();
+            }
             run.Ended.Set();
         }
 
@@ -482,6 +497,7 @@ namespace RiMCP.Command
 
             observation.Tick = Find.TickManager.TicksGame;
             observation.Speed = Find.TickManager.CurTimeSpeed;
+            observation.Blocking.AddRange(BlockingWindows.Names());
             List<Pawn> pawns = new List<Pawn>();
             foreach (Map map in Find.Maps)
             {

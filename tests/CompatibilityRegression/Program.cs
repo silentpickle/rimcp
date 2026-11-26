@@ -176,6 +176,22 @@ internal static class Program
             Step(reloaded, Observation(new object(), 150, TimeSpeed.Superfast));
             Check(Field<string>(reloaded, "EndReason") == "gameUnloaded", "loading another game must interrupt the run");
         });
+        Test("advance_dialog_blocks: a window that forces a pause ends the run while the speed stays selected", () =>
+        {
+            object game = new object();
+            object blocked = AdvanceRun(game, Observation(game, 100, TimeSpeed.Superfast), null);
+            Step(blocked, Blocking(Observation(game, 150, TimeSpeed.Superfast), "Dialog_NodeTree"));
+            Check(Field<string>(blocked, "Status") == "interrupted" && Field<string>(blocked, "EndReason") == "dialog" && Field<int>(blocked, "EndTick") == 150, "a forced pause must end the run with endReason dialog");
+            Check((bool)blocked.GetType().GetProperty("PausesGameAtEnd").GetValue(blocked, null), "a run ended by a window must pause, so closing the window does not run on unwatched");
+
+            object reached = AdvanceRun(game, Observation(game, 100, TimeSpeed.Superfast), null);
+            Step(reached, Blocking(Observation(game, 200, TimeSpeed.Superfast), "Dialog_NodeTree"));
+            Check(Field<string>(reached, "Status") == "completed", "reaching the target in the same frame still completes");
+
+            object clear = AdvanceRun(game, Observation(game, 100, TimeSpeed.Superfast), null);
+            Step(clear, Observation(game, 150, TimeSpeed.Superfast));
+            Check(Field<string>(clear, "Status") == "running", "no blocking window keeps the run going");
+        });
         Test("advance stop conditions fire on changes during the run, not on the starting state", () =>
         {
             object game = new object();
@@ -680,6 +696,12 @@ internal static class Program
         foreach (object colonist in colonists ?? new object[0]) colonistsById[Field<string>(colonist, "Id")] = colonist;
         IDictionary lettersById = Field<IDictionary>(observation, "Letters");
         foreach (object letter in letters ?? new object[0]) lettersById[Field<int>(letter, "Id")] = letter;
+        return observation;
+    }
+
+    private static object Blocking(object observation, string window)
+    {
+        Field<IList>(observation, "Blocking").Add(window);
         return observation;
     }
 

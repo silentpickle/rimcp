@@ -356,7 +356,12 @@ namespace RiMCP.Command
 
         public static bool Owns(Window window)
         {
-            return kept.Any(interaction => interaction.State == Interaction.Open && interaction.Dialog.Window == window);
+            return OwnerOf(window) != null;
+        }
+
+        public static Interaction OwnerOf(Window window)
+        {
+            return kept.FirstOrDefault(interaction => interaction.State == Interaction.Open && interaction.Dialog.Window == window);
         }
 
         public static void Update()

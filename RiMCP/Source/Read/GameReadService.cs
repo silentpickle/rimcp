@@ -70,6 +70,7 @@ namespace RiMCP.Read
             return Dto.Obj(
                 Dto.Field("ticksGame", ticks),
                 Dto.Field("paused", tickManager.Paused),
+                Dto.Field("blockedBy", RiMCP.Command.BlockingWindows.Describe()),
                 Dto.Field("timeSpeed", tickManager.CurTimeSpeed.ToString()),
                 Dto.Field("dayOfSeason", day),
                 Dto.Field("quadrum", GenDate.Quadrum(absTicks, longLat.x).ToString()),

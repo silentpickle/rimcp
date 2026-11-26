@@ -16,7 +16,8 @@ namespace RiMCP.Command
         private const float MinHours = 0.01f;
         private const float MaxHours = 24f;
         private const int MaxRequestIdLength = 100;
-        private const double MaxWaitSeconds = 30;
+        // Under the proxy's 100-second HTTP timeout.
+        private const double MaxWaitSeconds = 90;
 
         public static BridgeResponse SetGameSpeed(BridgeRequest request, RouteMatch route)
         {
@@ -140,7 +141,8 @@ namespace RiMCP.Command
                     Dto.Field("tick", ticks.TicksGame),
                     Dto.Field("speed", ticks.CurTimeSpeed.ToString()),
                     Dto.Field("paused", ticks.Paused),
-                    Dto.Field("forcedNormalSpeed", ticks.slower.ForcedNormalSpeed))),
+                    Dto.Field("forcedNormalSpeed", ticks.slower.ForcedNormalSpeed),
+                    Dto.Field("blockedBy", BlockingWindows.Describe()))),
                 Dto.Field("run", run == null ? null : SerializeRun(run))));
         }
 
@@ -174,7 +176,8 @@ namespace RiMCP.Command
                 Dto.Field("stopOn", AdvanceRun.Conditions.Where(run.StopOn.Contains).ToArray()),
                 Dto.Field("endReason", running ? null : run.EndReason),
                 Dto.Field("stoppedBy", run.StoppedBy == null ? null : SerializeEvent(run.StoppedBy)),
-                Dto.Field("events", run.Events.Select(SerializeEvent).ToArray()));
+                Dto.Field("events", run.Events.Select(SerializeEvent).ToArray()),
+                Dto.Field("blockedBy", run.EndReason == AdvanceRun.DialogReason ? BlockingWindows.Describe() : null));
             if (run.DroppedEvents > 0)
             {
                 dto["droppedEvents"] = run.DroppedEvents;
