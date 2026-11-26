@@ -141,6 +141,8 @@ namespace RiMCP.Read
                     Dto.Field("fuel", fuel.Fuel),
                     Dto.Field("targetFuelLevel", fuel.TargetFuelLevel));
                 dto["billGiver"] = building is IBillGiver;
+                dto["rotation"] = building.def.rotatable ? RiMCP.Command.BuildPlacement.RotationName(building.Rotation) : null;
+                dto["temperatureControl"] = TemperatureControlRead.Describe(building);
             }
             if (includeContents)
             {

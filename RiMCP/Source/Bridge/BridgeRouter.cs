@@ -65,6 +65,7 @@ namespace RiMCP.Bridge
             { "gizmos", GizmoService.ListGizmos },
             { "set-building-toggle", GizmoService.SetBuildingToggle },
             { "set-building-toggles", GizmoService.SetBuildingToggles },
+            { "set-target-temperature", TemperatureCommandService.SetTargetTemperature },
             { "use-gizmo", GizmoService.UseGizmo },
             { "buildings", BuildingReadService.ListBuildings },
             { "building", BuildingReadService.GetBuilding },

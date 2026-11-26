@@ -141,6 +141,27 @@ namespace RiMCP.Command
 
             private static string CellLabel(IntVec3 cell) => cell.x + "," + cell.z;
 
+            // Which side each planned cooler will cool, so a backwards cooler is caught before it
+            // is built. Null when the plan has no cooler.
+            private object[] CoolerSides()
+            {
+                var coolers = new List<object>();
+                for (int i = 0; i < buildings.Length; i++)
+                {
+                    if (!typeof(Building_Cooler).IsAssignableFrom(buildings[i].Def.thingClass))
+                    {
+                        continue;
+                    }
+                    coolers.Add(Dto.Obj(
+                        Dto.Field("x", anchors[i].x),
+                        Dto.Field("z", anchors[i].z),
+                        Dto.Field("rotation", BuildPlacement.RotationName(buildings[i].Rotation)),
+                        Dto.Field("cooledCell", Position(TemperatureControlRead.CooledCell(anchors[i], buildings[i].Rotation))),
+                        Dto.Field("exhaustCell", Position(TemperatureControlRead.ExhaustCell(anchors[i], buildings[i].Rotation)))));
+                }
+                return coolers.Count == 0 ? null : coolers.ToArray();
+            }
+
             // Radial coverage after construction. The game also needs a connected roof and
             // finished supports. Blueprints from unrelated projects are never assumed complete.
             private static object RoofCoverage(PlacementBody room, HashSet<IntVec3> supports, Map map)
@@ -230,6 +251,7 @@ namespace RiMCP.Command
                     Dto.Field("results", rejected.ToArray()), Dto.Field("materialEstimate", costs),
                     Dto.Field("roofSupport", rooms.Select(room => RoofCoverage(room, supports, map)).ToArray()),
                     Dto.Field("columns", anchors.Where((c, i) => buildings[i].Def.defName == "Column").Select(Position).ToArray()),
+                    Dto.Field("coolers", CoolerSides()),
                     Dto.Field("footprint", Dto.Obj(Dto.Field("minX", footprints.Min(r => r.minX)), Dto.Field("minZ", footprints.Min(r => r.minZ)),
                         Dto.Field("maxX", footprints.Max(r => r.maxX)), Dto.Field("maxZ", footprints.Max(r => r.maxZ)))));
             }
