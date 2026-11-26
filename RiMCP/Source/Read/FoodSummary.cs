@@ -17,19 +17,26 @@ namespace RiMCP.Read
         public const float LowPerColonist = 4f;
 
         public FoodSample Stored;
+        // At the fed hunger rate. Hungry pawns' current drain is lower, so projecting it would make
+        // reserves look longer exactly when pawns are going hungry.
         public float EatenPerDay;
+        // The current drain, for decisions about the pawns as they are now.
+        public float DrainNowPerDay;
         public float RotsWithinDay;
         public float RotsWithinThreeDays;
 
         public static FoodSummary Of(Map map)
         {
+            // Prisoners eat from the same food, as the Low food alert's estimate counts.
+            List<Need_Food> eaters = map.mapPawns.FreeColonistsSpawned.Concat(map.mapPawns.PrisonersOfColonySpawned)
+                .Where(pawn => pawn.needs != null && pawn.needs.food != null)
+                .Select(pawn => pawn.needs.food)
+                .ToList();
             FoodSummary food = new FoodSummary
             {
                 Stored = FoodSample.Take(map),
-                // Prisoners eat from the same food, as the Low food alert's estimate counts.
-                EatenPerDay = map.mapPawns.FreeColonistsSpawned.Concat(map.mapPawns.PrisonersOfColonySpawned)
-                    .Where(pawn => pawn.needs != null && pawn.needs.food != null)
-                    .Sum(pawn => pawn.needs.food.FoodFallPerTick) * GenDate.TicksPerDay
+                EatenPerDay = eaters.Sum(need => need.FoodFallPerTickAssumingCategory(HungerCategory.Fed, true)) * GenDate.TicksPerDay,
+                DrainNowPerDay = eaters.Sum(need => need.FoodFallPerTick) * GenDate.TicksPerDay
             };
             foreach (Thing thing in FoodSample.StoredFood(map))
             {
@@ -73,6 +80,7 @@ namespace RiMCP.Read
                     Dto.Field("raw", Math.Round(Stored.Raw, 1)),
                     Dto.Field("total", Math.Round(Stored.Total, 1)))),
                 Dto.Field("eatenPerDay", Math.Round(EatenPerDay, 1)),
+                Dto.Field("drainNowPerDay", Math.Round(DrainNowPerDay, 1)),
                 Dto.Field("daysLeft", EatenPerDay <= 0f ? null : (object)Math.Round(Stored.Total / EatenPerDay, 1)),
                 Dto.Field("rotsWithin", Dto.Obj(
                     Dto.Field("day", Math.Round(RotsWithinDay, 1)),
