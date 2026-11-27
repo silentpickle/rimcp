@@ -2,6 +2,8 @@
 
 Run one RimMCP stdio proxy per role against the same game instance. The main role controls time, decisions, and saves. Give a maintenance role the reads and mutations needed for its assignment. Start a new client session after changing a proxy's settings.
 
+For the role labels in the table below, the proxy returns role-specific startup guidance. Every role can read `rimcp://guide/getting-started` or open the [getting-started guide](getting-started.md). The host still assigns work and passes results between roles.
+
 ## Proxy settings
 
 | Variable | Behavior |
@@ -19,8 +21,14 @@ Keep the bridge token and broad proxy configuration in the trusted runner. The l
 | Main | `observe,time,decisions,orders,pawnControl,gameSetup` | Omit when groups cover the assignment |
 | Steward | `observe` | `set_work_priorities` for the initial trial. Add individual administration tools as standing duties expand. |
 | Scribe | Omit | `get_game_context,get_turn_digest,get_events,get_colony_status,get_advance,get_operation,list_saves,get_game_log` |
+| Sentinel (`sentinel`) | Omit | `get_game_context,get_turn_digest,get_advance,get_events,list_threats` |
+| Land advisor (`land-advisor`) | Omit | `get_game_context,get_map_survey,list_resources,check_placement` |
+| Builder (`builder`) | Omit | `get_game_context,get_map_survey,check_placement,list_buildings,list_resources`. Add `place_blueprint` only for an assignment that includes order submission. |
+| Researcher (`researcher`) | Omit | `get_game_context,get_research,search_defs,get_def`. Configure RimSage or Rimdex Reference separately if used. |
 
 For scribe sessions with no diagnostics assignment, omit `get_game_log` from the comma-separated list. An exact list avoids enabling other diagnostic commands, including `export_reference`.
+
+Optional specialists can be assigned when a specific question or task comes up. Give Sentinel watcher stops and digests from main. Give Builder a scoped assignment and avoid overlapping writes with Steward. Builder can use the read-only placement check first. The `place_blueprint` tool supports both preview and submission, so granting it allows both.
 
 ## Connect a client
 
@@ -71,3 +79,7 @@ RIMCP_TOOLS = "get_game_context,get_turn_digest,get_events,get_colony_status,get
 - With the disposable mod set to **Read only**, a proxy scoped to `observe,time` listed `get_game_context` and excluded `set_game_speed`. A direct call to `set_game_speed` reached the mod and was refused because the global Time group was off.
 - The scribe read the turn digest and status, followed one checkpoint letter using `get_events`, sampled retained warnings, and confirmed the save via `get_operation`. The same checkpoint evidence produced the same event identity. The consumed cursor returned no duplicate, and the game reported a history reset after reload.
 - The DLL advertised SHA-256 `6721be098ebd15f7c651d4bbb44eabe0fd83616c27657d3ea3eaa0bc42b22d1d`. The proxy reported version 1.2.0. The trial used scripted clients for MCP transport and game behavior. Running the role prompts in actual Codex and Claude Code play sessions remains open.
+
+### Light writing trial
+
+A second disposable run used the main connection's digest and verified save receipt to produce a diary and resumable handoff. The scoped scribe connection recorded 9 successful pre-reload calls and 28,856 bridge reply bytes across the harness, including replay and metric sampling. The history cursor suppressed a duplicate test letter and reset on reload. Codex wrote the checkpoint from captured responses. Independent model roles in Codex and Claude Code, live incomplete history, and a normal checkpoint's incremental cost remain open. [Colony trial and diary](../../rimworld/colonies/benevolina-of-november/handoffs/2026-11-27-wave-5.md#light-scribe-writing-trial)

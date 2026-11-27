@@ -142,6 +142,8 @@ Use `smooth_walls` with rectangles for exposed natural rock walls. Use `list_bui
 
 ## Using The Mod
 
+The proxy sends a short operating guide when the MCP client connects. Clients that support MCP resources can open `rimcp://guide/getting-started` even while the game is offline. The same [getting-started guide](docs/getting-started.md) is available here.
+
 1. Open the RimMCP mod settings page.
 2. On the **Connection** tab, click **Copy MCP config** to copy the MCP configuration including the URL and token.
 3. Configure your preferred Agentic client with MCP support. (Most agents can configure themselves given the MCP config info)

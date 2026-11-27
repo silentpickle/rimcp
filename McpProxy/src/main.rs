@@ -24,7 +24,11 @@ const ACCESS_POLL_SECONDS: u64 = 5;
 // Newest first: a client asking for one of these gets it, any other the newest.
 const PROTOCOL_VERSIONS: [&str; 4] = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const INSTRUCTIONS: &str = "RimMCP plays a running RimWorld game. Start with get_game_context: it says whether the game is at the main menu, in new-game setup, or playing, and which map is shown. Then get_colony_status lists what needs attention. Reads default to a short summary; ask for more with detail or include only when needed. Give each change a requestId, so a retry is safe. Read a reply's dialogs: a question the game asks waits for answer_dialog, or for the player. Use tell_player to tell the player what you are doing.";
-const SCOPED_INSTRUCTIONS: &str = "Use the RimMCP tools advertised for this role. Reads default to a short summary. Forward decisions outside your role to the main agent.";
+const SCOPED_INSTRUCTIONS: &str = "Use the RimMCP tools advertised for this role and stay within your assignment. Reads default to a short summary.";
+
+const GUIDE_URI: &str = "rimcp://guide/getting-started";
+const GUIDE_MIME: &str = "text/markdown";
+const GUIDE: &str = include_str!("../../docs/getting-started.md");
 
 type ProxyError = Box<dyn Error>;
 
@@ -451,13 +455,39 @@ impl Proxy {
                 Dispatch::Reply(result(
                     id,
                     json!({
-                        "protocolVersion": version, "capabilities": {"tools": {"listChanged": true}},
+                        "protocolVersion": version, "capabilities": {"tools": {"listChanged": true}, "resources": {}},
                         "serverInfo": {"name": "rimcp", "version": self.manifest.version},
-                        "instructions": if self.allowed_tools.is_some() { SCOPED_INSTRUCTIONS } else { INSTRUCTIONS }
+                        "instructions": self.instructions()
                     }),
                 ))
             }
             "notifications/initialized" => Dispatch::Silent,
+            "resources/list" => Dispatch::Reply(result(
+                id,
+                json!({"resources": [{
+                    "uri": GUIDE_URI, "name": "getting-started", "title": "RimMCP getting started",
+                    "description": "Connection setup, role coordination, watcher-driven play, and references",
+                    "mimeType": GUIDE_MIME
+                }]}),
+            )),
+            "resources/templates/list" => {
+                Dispatch::Reply(result(id, json!({"resourceTemplates": []})))
+            }
+            "resources/read" => {
+                let reply = match fields
+                    .get("params")
+                    .and_then(|params| params.get("uri"))
+                    .and_then(Value::as_str)
+                {
+                    Some(GUIDE_URI) => result(
+                        id,
+                        json!({"contents": [{"uri": GUIDE_URI, "mimeType": GUIDE_MIME, "text": GUIDE}]}),
+                    ),
+                    Some(_) => failure(id, -32002, "Resource not found."),
+                    None => failure(id, -32602, "Expected a resource URI string."),
+                };
+                Dispatch::Reply(reply)
+            }
             "tools/list" => Dispatch::Reply(result(id, self.list_tools())),
             "tools/call" => Dispatch::Call(
                 id.clone(),
@@ -468,6 +498,25 @@ impl Proxy {
             }
             _ => Dispatch::Silent,
         }
+    }
+
+    fn instructions(&self) -> String {
+        let workflow = match self.role.as_deref() {
+            Some("main") => "Own time, dialogs, and saves. Use watcher-driven advance_time when available, and share the digest and receipts at stops.",
+            Some("steward") => "Apply only delegated changes and return receipts to main. Let main manage the clock.",
+            Some("sentinel") => "Triage watcher stops and report urgent changes to main with map and tick. Reuse the shared digest and leave time and dialogs to main.",
+            Some("land-advisor") => "Survey land and compare candidate sites using bounded reads. Record load, map, tick, and site constraints. Keep the survey read-only in game.",
+            Some("builder") => "Preview an assigned build, report blockers, and place only approved orders. Report what was queued and verify completion separately.",
+            Some("researcher") => "Answer a specific game or research question using loaded definitions and versioned references. Report prerequisites and evidence to main, who selects the project.",
+            Some("scribe") => "Reuse the main digest and save receipt. Read incremental events with a cursor and sample logs only when relevant.",
+            _ => "For multi-agent play, give main control of time, steward bounded orders, and scribe checkpoint reads. Share the digest instead of polling the whole map independently.",
+        };
+        let base = if self.allowed_tools.is_some() {
+            SCOPED_INSTRUCTIONS
+        } else {
+            INSTRUCTIONS
+        };
+        format!("{base} {workflow} Read {GUIDE_URI} for setup, role workflows, and references.")
     }
 
     fn call(&self, id: &Value, params: &Value) -> Value {
@@ -1368,6 +1417,47 @@ mod tests {
         assert!(reply(Value::Null)["instructions"]
             .as_str()
             .is_some_and(|text| text.contains("get_game_context")));
+    }
+
+    #[test]
+    fn specialist_roles_receive_their_own_workflow() {
+        let mut proxy = disconnected_proxy();
+        for (role, expected) in [
+            ("sentinel", "Triage watcher stops"),
+            ("land-advisor", "compare candidate sites"),
+            ("builder", "place only approved orders"),
+            ("researcher", "versioned references"),
+        ] {
+            proxy.role = Some(role.into());
+            assert!(proxy.instructions().contains(expected), "{role}");
+        }
+    }
+
+    #[test]
+    fn scoped_client_can_discover_and_read_the_guide_offline() {
+        let mut proxy = disconnected_proxy();
+        proxy.allowed_tools = Some(HashSet::new());
+        proxy.role = Some("scribe".into());
+        let request = |method, params| {
+            let request = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
+            proxy.handle(request.to_string().as_bytes()).unwrap()
+        };
+
+        let init = request("initialize", json!({}));
+        assert_eq!(init["result"]["capabilities"]["resources"], json!({}));
+        let instructions = init["result"]["instructions"].as_str().unwrap();
+        assert!(instructions.contains("Reuse the main digest"));
+        assert!(instructions.contains(GUIDE_URI));
+        assert!(!instructions.contains("Start with get_game_context"));
+
+        let listed = request("resources/list", json!({}));
+        assert_eq!(listed["result"]["resources"][0]["uri"], GUIDE_URI);
+        let read = request("resources/read", json!({"uri": GUIDE_URI}));
+        assert_eq!(read["result"]["contents"][0]["text"], GUIDE);
+        let unknown = request("resources/read", json!({"uri": "file:///etc/passwd"}));
+        assert_eq!(unknown["error"]["code"], -32002);
+        let missing = request("resources/read", json!({}));
+        assert_eq!(missing["error"]["code"], -32602);
     }
 
     #[test]

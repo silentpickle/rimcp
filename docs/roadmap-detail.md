@@ -27,6 +27,10 @@ At the November 27 checkpoint, `8b0f71c` includes the source-research guide and 
 
 ### Close Wave 5
 
+The stdio proxy now advertises an offline [getting-started resource](getting-started.md) and sends concise role-specific startup guidance for main, steward, scribe, and the optional Sentinel, Land advisor, Builder, and Researcher roles. Verify how Codex and Claude Code surface that guidance during the independent role trials.
+
+The light writing trial produced a diary and handoff from scripted live role responses, reusing the main digest and save receipt. [Trial evidence and scope](wave-5-roles.md#light-writing-trial)
+
 1. Run the main, steward, and scribe prompts on one disposable save in Codex, then repeat with Claude Code. Confirm each session has only its assigned RimMCP connection. Have the steward make one approved work change, then hand the receipt to the main agent. The main agent advances and verifies a save. [Client setup](wave-5-roles.md#connect-a-client)
 2. Hand the scribe the actual digest, operation receipt, and prior history cursor. Check the written diary and resumable handoff against the observed load, map, tick, game event, diagnostic excerpt, and verified save. Repeat the checkpoint and reload. Verify that an incomplete-history reply produces an explicit coverage note. The scripted run covered a repeated event and load reset. Live history loss remains open. [Scribe inputs and verification](#wave-5--main-agent-and-maintenance-agents)
 3. Record the added calls and reply bytes from the scribe's role metrics, including which inputs it reused from the main agent. Record the client and the fixture in the trial handoff. [Role metrics](wave-5-roles.md#verify-a-role)
