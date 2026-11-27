@@ -6,6 +6,8 @@ using Verse;
 
 namespace RiMCP.Read
 {
+    internal delegate char TileSymbol(IReadOnlyDictionary<char, int> counts, int cells, char majority);
+
     internal sealed class MapLayerProjection
     {
         public const char Unexplored = '?';
@@ -22,8 +24,15 @@ namespace RiMCP.Read
             }
             else
             {
-                projection.Draw(bounds, scale, sample);
+                projection.Draw(bounds, scale, sample, null);
             }
+            return projection;
+        }
+
+        public static MapLayerProjection ReadOverview(CellRect bounds, int scale, Func<IntVec3, char> sample, TileSymbol tileSymbol)
+        {
+            var projection = new MapLayerProjection();
+            projection.Draw(bounds, scale, sample, tileSymbol);
             return projection;
         }
 
@@ -37,7 +46,7 @@ namespace RiMCP.Read
             }
         }
 
-        private void Draw(CellRect bounds, int scale, Func<IntVec3, char> sample)
+        private void Draw(CellRect bounds, int scale, Func<IntVec3, char> sample, TileSymbol tileSymbol)
         {
             int columns = (bounds.Width + scale - 1) / scale;
             int height = (bounds.Height + scale - 1) / scale;
@@ -46,24 +55,24 @@ namespace RiMCP.Read
             for (int row = 0; row < height; row++)
             {
                 int z = bounds.minZ + (height - 1 - row) * scale;
-                Rows[row] = DrawRow(bounds, z, scale, columns, sample, tile);
+                Rows[row] = DrawRow(bounds, z, scale, columns, sample, tile, tileSymbol);
             }
         }
 
-        private string DrawRow(CellRect bounds, int z, int scale, int columns, Func<IntVec3, char> sample, Dictionary<char, int> tile)
+        private string DrawRow(CellRect bounds, int z, int scale, int columns, Func<IntVec3, char> sample, Dictionary<char, int> tile, TileSymbol tileSymbol)
         {
             var row = new StringBuilder(columns);
             for (int x = bounds.minX; x <= bounds.maxX; x += scale)
             {
                 char symbol = scale == 1 ? SampleCell(sample, new IntVec3(x, 0, z)) :
-                    ReadTile(CellRect.FromLimits(x, z, Math.Min(bounds.maxX, x + scale - 1), Math.Min(bounds.maxZ, z + scale - 1)), sample, tile);
+                    ReadTile(CellRect.FromLimits(x, z, Math.Min(bounds.maxX, x + scale - 1), Math.Min(bounds.maxZ, z + scale - 1)), sample, tile, tileSymbol);
                 shown.Add(symbol);
                 row.Append(symbol);
             }
             return row.ToString();
         }
 
-        private char ReadTile(CellRect bounds, Func<IntVec3, char> sample, Dictionary<char, int> tile)
+        private char ReadTile(CellRect bounds, Func<IntVec3, char> sample, Dictionary<char, int> tile, TileSymbol tileSymbol)
         {
             tile.Clear();
             char winner = Unexplored;
@@ -78,7 +87,7 @@ namespace RiMCP.Read
                     winner = symbol;
                 }
             }
-            return winner;
+            return tileSymbol == null ? winner : tileSymbol(tile, bounds.Width * bounds.Height, winner);
         }
 
         private char SampleCell(Func<IntVec3, char> sample, IntVec3 cell)

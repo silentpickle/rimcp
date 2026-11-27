@@ -244,7 +244,7 @@ internal static partial class Program
         {
             IEnumerable tools = (IEnumerable)mod.GetType("RiMCP.Shared.ToolManifest", true).GetProperty("McpTools", Static).GetValue(null);
             Dictionary<string, int> counts = tools.Cast<object>().GroupBy(tool => Field<string>(tool, "Group") ?? "(none)").ToDictionary(group => group.Key, group => group.Count());
-            var expected = new Dictionary<string, int> { { "observe", 42 }, { "diagnostics", 4 }, { "time", 2 }, { "administration", 15 }, { "orders", 7 }, { "pawnControl", 5 }, { "decisions", 3 }, { "gameSettings", 1 }, { "gameSetup", 14 } };
+            var expected = new Dictionary<string, int> { { "observe", 43 }, { "diagnostics", 4 }, { "time", 2 }, { "administration", 15 }, { "orders", 7 }, { "pawnControl", 5 }, { "decisions", 3 }, { "gameSettings", 1 }, { "gameSetup", 14 } };
             int count;
             Check(counts.Count == expected.Count && expected.All(pair => counts.TryGetValue(pair.Key, out count) && count == pair.Value),
                 "group sizes: " + string.Join(", ", counts.Select(pair => pair.Key + "=" + pair.Value).ToArray()));
@@ -307,6 +307,9 @@ internal static partial class Program
         Test("map layers leave out their rows when they mark nothing", CheckMapLayers);
         Test("W1C_scaled_tiles", CheckScaledMapTiles);
         Test("W1C_exact_counts", CheckMapSymbolCounts);
+        Test("S1_tile_edges", CheckSurveyTileEdges);
+        Test("S1_tile_priority", CheckSurveyPriority);
+        Test("S1_region_connectivity", CheckSurveyRegions);
         Test("order_pawn and designate offer exactly the kinds they handle, and queue reaches the handler", () =>
         {
             CheckOfferedKinds("order_pawn", "order", "RiMCP.Command.PawnOrderCommandService", "Orders");

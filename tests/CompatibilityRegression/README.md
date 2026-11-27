@@ -41,8 +41,10 @@ $env:NUGET_PACKAGES = Join-Path $PWD '.nuget/packages'
 dotnet restore tests/CompatibilityRegression/CompatibilityRegression.csproj --source $env:NUGET_PACKAGES "-p:RimWorldManagedPath=$managed"
 ```
 
-The ninety-three checks cover:
+The ninety-six checks cover:
 
+- Survey tile routing and edge clipping, overview priority, and connected
+  regions with fog borders and dominant background.
 - Scaled map tiles with partial edges and deterministic ties, plus exact counts
   from the original cells.
 - All nine advance watchers, including simultaneous stop priority, threat-letter

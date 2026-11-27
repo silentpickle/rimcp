@@ -80,6 +80,15 @@ namespace RiMCP.Read
                     return null;
                 }
                 string[] path = detailSection.Split('.');
+                if (path.Length == 1)
+                {
+                    if (!data.Remove(detailSection))
+                    {
+                        return null;
+                    }
+                    omittedFields.Add(detailSection);
+                    return Json.Serialize(envelope);
+                }
                 if (!data.TryGetValue(path[0], out object value) || !(value is Dictionary<string, object> fields))
                 {
                     return null;

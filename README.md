@@ -46,6 +46,10 @@ The building, thing, plant, and pawn lists accept `fields`. Select `["id","def",
 
 Map views take `scale` from 1 to 16. Width, height, and origin are still in game cells. At scale 1 the grid is at most 40×40. A scaled grid has at most 48 tiles on either side, with each tile showing the most common visible or unexplored symbol. Tiles are anchored at the southwest origin, partial tiles are included, and rows still run north to south. For example, `{"x":0,"z":0,"width":225,"height":225,"scale":5}` gives a 45×45 grid on a map of that size.
 
+`get_map_survey` gives a whole-map overview up to 45 tiles on either side. It gives priority to visible colonists, hostiles, and structures. Each overview row has a corresponding south coordinate in `rowZ`. The survey also reports the largest connected region per class and names a visible majority class as background. Use `regionsPerClass` from 0 to 3 to control the detail. Region `bounds` are `[x,z,width,height]` and `center` is `[x,z]`.
+
+Survey tiles use a separate 32-cell lattice anchored at the southwest map corner. For example, `get_map_view` with `{"tile":"x4z2"}` opens the tile at `(128,64)`. Edge tiles crop at the map boundary. Pass `tile` in place of `x`, `z`, `width`, and `height`.
+
 Use `as: "counts"` for exact counts of the underlying symbols, including `?` for unexplored cells. Counts views omit grid rows and can cover up to 400×400 cells. The optional roof and designation layers support both projections and keep `markedCells` in game cells at every scale.
 
 Tool payloads default to 4,096 UTF-8 bytes. Set `maxBytes` from 1,024 to 32,768 to change the budget. Capped reads report `truncated: true` and a `budget` with the omitted fields or row count. If `nextCursor` appears, continue with the same filters and the returned cursor. For an omitted section or a page whose first row did not fit, retry using the original query with a larger budget, less detail, or narrower filters. For event history, keep the original `since` when the history section was omitted.

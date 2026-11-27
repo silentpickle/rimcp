@@ -26,6 +26,7 @@ namespace RiMCP.Bridge
             { "things", ThingReadService.FindThings },
             { "plants", PlantReadService.ListPlants },
             { "map-view", MapViewReadService.GetMapView },
+            { "map-survey", MapSurveyReadService.GetMapSurvey },
             { "designate", DesignationCommandService.Designate },
             { "set-zone", ZoneCommandService.SetZone },
             { "set-storage", ZoneCommandService.SetStorage },

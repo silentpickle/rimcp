@@ -44,7 +44,8 @@ namespace RiMCP.Read
             Map map = context.Map;
             int scale = Scale(query);
             bool countsOnly = CountsOnly(query);
-            CellRect bounds = Bounds(query, map, scale, countsOnly);
+            string tile = query.Get("tile");
+            CellRect bounds = tile == null ? Bounds(query, map, scale, countsOnly) : SurveyTiles.Resolve(query, map.Size);
             MapLayer[] layers = MapLayerRegistry.Select(query.List("layers")).ToArray();
 
             var meanings = new Dictionary<char, string>();
@@ -61,6 +62,7 @@ namespace RiMCP.Read
 
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("origin", Dto.Obj(Dto.Field("x", bounds.minX), Dto.Field("z", bounds.minZ))),
+                Dto.Field("tile", tile),
                 Dto.Field("width", bounds.Width),
                 Dto.Field("height", bounds.Height),
                 Dto.Field("scale", scale > 1 ? (int?)scale : null),
@@ -125,7 +127,7 @@ namespace RiMCP.Read
         // Colonists get letters by when they arrived (A is the earliest ThingID), so a colonist keeps
         // its letter from one view to the next; the legend gives each one's name, id, and job. A
         // colonist sharing a cell with another pawn wins the cell.
-        private static Dictionary<IntVec3, char> PawnSymbols(Map map, CellRect view, Dictionary<char, string> meanings)
+        internal static Dictionary<IntVec3, char> PawnSymbols(Map map, CellRect view, Dictionary<char, string> meanings)
         {
             Dictionary<IntVec3, char> symbols = new Dictionary<IntVec3, char>();
             List<Pawn> colonists = map.mapPawns.AllPawnsSpawned
@@ -141,7 +143,7 @@ namespace RiMCP.Read
                 }
                 char letter = i < 26 ? (char)('A' + i) : '@';
                 symbols[colonist.Position] = letter;
-                if (letter != '@')
+                if (letter != '@' && meanings != null)
                 {
                     meanings[letter] = Describe(colonist);
                 }
@@ -172,7 +174,7 @@ namespace RiMCP.Read
         }
 
         // Ground below farmable fertility, such as sand, cannot hold a growing zone, so it is not soil.
-        private static char CellSymbol(IntVec3 cell, Map map, float farmable)
+        internal static char CellSymbol(IntVec3 cell, Map map, float farmable, bool showItems = true)
         {
             Building edifice = cell.GetEdifice(map);
             if (edifice != null)
@@ -206,7 +208,7 @@ namespace RiMCP.Read
             }
             for (int i = 0; i < things.Count; i++)
             {
-                if (things[i].def.EverHaulable)
+                if (showItems && things[i].def.EverHaulable)
                 {
                     return '*';
                 }
