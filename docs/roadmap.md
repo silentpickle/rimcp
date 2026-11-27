@@ -2,7 +2,7 @@
 
 The goal is a repeatable play loop in which an MCP client reads a compact account of what changed, sends a batch of orders, and lets RimWorld run until a meaningful condition stops it. The bridge should use the game's own checks, respect fog and access settings, and give callers a way to recover omitted detail.
 
-This page tracks implementation in the fork. The colony workspace owns the detailed package order, playtest backlog, and save-specific handoffs. In adjacent checkouts, its plan is at `../rimworld/plan/mcp-roadmap.md` relative to the fork root.
+The [detailed fork roadmap](roadmap-detail.md) tracks package order, dependencies, and verification. The companion colony workspace keeps the playtest backlog, design notes, and save-specific handoffs.
 
 ## Landed through November 26, 2026
 

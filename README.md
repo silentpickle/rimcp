@@ -2,15 +2,23 @@
 
 <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=3809698070"><img src="RiMCP/About/Preview.png" alt="RimMCP: agentic intelligence for the Rim" width="640"></a>
 
-**[RimMCP - AI Agents for RimWorld (MCP)](https://steamcommunity.com/sharedfiles/filedetails/?id=3809698070)** on the Steam Workshop
+[Original RimMCP on the Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3809698070)
 
 RimMCP is a RimWorld mod that connects MCP-compatible clients to a live colony. The mod runs inside RimWorld and hosts a token-protected HTTP endpoint on `127.0.0.1`. MCP clients can then use the bundled stdio proxy.
 
 Supports RimWorld 1.6 and 1.7 unstable using the same mod DLL. The 1.7 engine's compatibility layer loads the assembly built against the 1.6 API; future unstable updates may require further testing.
 
-[Fork roadmap](docs/roadmap.md) · [Survey workflow and verification](docs/survey-workflow.md)
+## Why this fork
 
-Current MCP tools:
+This fork builds on rakanssh's RimMCP, which provides the in-game bridge, native controls, and stdio proxy. Thanks to rakanssh for making that foundation available. [Upstream RimMCP](https://github.com/rakanssh/rimcp)
+
+I want an agent to play a RimWorld colony across many sessions and eventually manage expeditions from departure through return. That means seeing the whole map, finding the detail that matters, and knowing when to let the game run. The fork already adds a whole-map survey with named tiles, visible mover groups and landmarks, plus bounded replies and more ways to read or act in batches.
+
+The next step is to summarize what changed during an advance. Those summaries will feed a compact turn digest and a mode that keeps the game running between turns. The longer roadmap includes shared construction previews, caravan formation and reforming, and narrower roles for agents that help maintain the colony.
+
+[Roadmap overview](docs/roadmap.md) · [Detailed fork roadmap](docs/roadmap-detail.md) · [Survey workflow and verification](docs/survey-workflow.md) · [Build this fork](#building-from-source)
+
+## Current MCP tools
 
 | Area | Tools | Use these for |
 | --- | --- | --- |
@@ -20,7 +28,8 @@ Current MCP tools:
 | Pawns and work | `list_pawns`, `get_pawn`, `list_work`, `set_pawn_drafted`, `set_pawn_work_priority`, `set_work_priorities`, `set_pawn_assignment` | Inspect colonists, prisoners, animals, threats, work priorities, schedules, policies, medical care, allowed areas, and other Assign-tab settings. `set_work_priorities` sets up to 100 Work-tab entries in one call, each checked and reported on its own. |
 | Production | `list_production`, `get_bill`, `set_bill`, `list_workshops`, `get_workshop`, `add_bill_to_workshop` | Inspect bills and workbenches, see whether each bill will run and what stops it, add new bills, update bill settings, suspend bills, or delete bills. |
 | Map state | `list_resources`, `list_zones`, `get_zone`, `list_buildings`, `get_building`, `get_environment`, `get_power`, `list_threats` | Inspect stockpiles, growing zones, buildings, storage contents, weather, rooms, power grids, hazards, fires, and hostile activity. |
-| Items, map view and placement | `find_things`, `get_map_view`, `check_placement` | Find items with positions, stack sizes, forbidden state and storage; see part of the map as a character grid with colonists, pawns, blueprints, and optional roof and order layers; check where a building fits. Unexplored areas stay hidden. |
+| Map survey | `get_map_survey`, `get_map_view` | Survey the whole map, find visible movers and landmarks, and zoom to a named tile with optional roof and designation layers. |
+| Items and placement | `find_things`, `check_placement` | Find items with positions, stack sizes, forbidden state and storage, and check where a building fits. |
 | Zones, storage, areas and owners | `set_zone`, `set_storage`, `set_growing_zone`, `set_area`, `assign_owner` | Create and edit stockpiles and growing zones, set what storage accepts and its priority, choose a zone's crop, paint the Home and allowed areas, and assign beds, thrones and other buildings to their owners. Each rejected cell is listed with its reason, and growing zones report what stops them, such as the season. |
 | Orders | `designate`, `place_blueprint`, `order_pawn`, `order_pawns` | Forbid, unforbid, haul, cut, harvest, chop wood, mine, deconstruct or cancel; place blueprints for colonists to build; and order a pawn to equip a weapon or wear apparel (at once or queued like shift-click), or, drafted, to move, attack, rescue, or tend. All with the game's own checks. `order_pawns` gives up to 20 orders in one call and refuses a second claim on the same item. |
 | Right-click menu and buttons | `list_pawn_actions`, `choose_pawn_action`, `list_gizmos`, `set_building_toggle`, `set_building_toggles`, `set_target_temperature`, `use_gizmo` | Give any order a pawn's right-click menu offers, such as capturing, arresting, stripping, or prioritizing a job, and press the buttons a selected building or pawn shows: power switches, holding a door open, a turret's hold fire, a mortar's attack, or an ability on a target. Options and buttons come from the game's own lists and are chosen as a click does, a target is checked with the button's own rules before it is given, and flows agents cannot finish, such as trading or rituals, are refused before anything runs. Mods' options and buttons work too, marked with their mod. `set_building_toggles` sets one toggle by label on up to 50 buildings. When a mod replaces a building to apply a toggle, such as Hospitality's guest beds, the result names the replacement. `set_target_temperature` sets a thermostat in °C; `get_building` shows its target, and a cooler's rotation, cooled cell and exhaust cell, which `place_blueprint` previews before building. |
