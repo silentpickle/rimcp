@@ -17,7 +17,7 @@ namespace RiMCP.Read
                 Dto.Field("weather", SerializeWeather(context.Map)),
                 Dto.Field("conditions", SerializeGameConditions(context.Map)),
                 Dto.Field("rooms", SerializeRooms(context.Map, context.Request)),
-                Dto.Field("hazards", SerializeHazards(context.Map))));
+                Dto.Field("hazards", SerializeHazards(context.Map))), pageField: "rooms");
         }
 
         public static object SummarizeEnvironment(Map map)

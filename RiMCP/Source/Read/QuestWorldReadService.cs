@@ -29,7 +29,7 @@ namespace RiMCP.Read
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("quests", page.Items.Select(quest => SerializeQuest(quest, context.Request.Detail)).ToArray())),
                 page.Truncated,
-                page.NextCursor);
+                page.NextCursor, "quests");
         }
 
         // Dismissed quests are listed under Historical, from where they can be restored.
@@ -67,7 +67,7 @@ namespace RiMCP.Read
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("playerFaction", factions == null ? null : SerializeFaction(Faction.OfPlayer)),
                 Dto.Field("factions", factions == null ? new object[0] : factions.AllFactionsListForReading.Select(SerializeFaction).ToArray()),
-                Dto.Field("worldObjects", SerializeWorldObjects(context.Request))));
+                Dto.Field("worldObjects", SerializeWorldObjects(context.Request))), pageField: "worldObjects");
         }
 
         private static object SerializeQuest(Quest quest, ReadDetail detail)

@@ -41,8 +41,10 @@ $env:NUGET_PACKAGES = Join-Path $PWD '.nuget/packages'
 dotnet restore tests/CompatibilityRegression/CompatibilityRegression.csproj --source $env:NUGET_PACKAGES "-p:RimWorldManagedPath=$managed"
 ```
 
-The eighty-six checks cover:
+The eighty-nine checks cover:
 
+- Byte budgets on paged reads, including UTF-8 width, an exact size boundary,
+  and cursor recovery when a row is too large.
 - Running wall time as a share of elapsed wall time, including pauses, with
   independent samples after each load.
 

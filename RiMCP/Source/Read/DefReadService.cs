@@ -60,7 +60,7 @@ namespace RiMCP.Read
                 Dto.Field("category", category),
                 Dto.Field("defs", page.Items.Select(def => SerializeDef(def, ReadDetail.Summary)).ToArray())),
                 page.Truncated,
-                page.NextCursor);
+                page.NextCursor, "defs");
         }
 
         public static BridgeResponse GetDef(BridgeRequest request, RouteMatch route)

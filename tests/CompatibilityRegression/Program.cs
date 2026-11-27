@@ -401,6 +401,9 @@ internal static partial class Program
             finally { Current.Game = null; }
         });
         Test("L1_wall_accounting", CheckPlayTime);
+        Test("L2_page_cursor", CheckPageReplyBudget);
+        Test("L2_oversized_row", CheckNestedReplyBudget);
+        Test("L2_byte_boundary", CheckExactReplyBudget);
         Console.WriteLine(passed + " passed; " + failed + " failed.");
         return failed == 0 ? 0 : 1;
     }
@@ -422,6 +425,66 @@ internal static partial class Program
         Check((double)share.GetValue(clock, null) == halfRunning, "count paused time in the denominator");
         observe.Invoke(clock, new object[] { "second", nextLoadAt, false });
         Check(share.GetValue(clock, null) == null, "a new load starts with no samples");
+    }
+
+    private const int MinimumReplyBudget = 1024;
+    private const int FirstCursor = 5;
+    private const int NextCursor = FirstCursor + 1;
+    private const int ThreeRows = 3;
+    private const int MultibyteRowChars = 300;
+
+    private static void CheckPageReplyBudget()
+    {
+        string row = new string('é', MultibyteRowChars);
+        string[] rows = { row, row + "b", row + "c" };
+        int originalCursor = FirstCursor + ThreeRows;
+        var fields = new Dictionary<string, object> { { "entries", rows } };
+        var source = new Dictionary<string, object> { { "data", fields }, { "truncated", true }, { "nextCursor", originalCursor } };
+        string body = BudgetedReply(source, MinimumReplyBudget, "entries");
+        var reply = Json.Deserialize<Dictionary<string, object>>(body);
+        var budget = (Dictionary<string, object>)reply["budget"];
+        Check(System.Text.Encoding.UTF8.GetByteCount(body) <= MinimumReplyBudget, "UTF-8 payload must fit");
+        Check((int)reply["nextCursor"] == NextCursor && (bool)reply["truncated"], "cursor must advance past only delivered rows");
+        Check((int)budget["omittedRows"] == ThreeRows - 1 && (string)budget["rowsField"] == "entries", "omitted rows must be described");
+        Check(Rows(Data(reply)["entries"]).Cast<string>().SequenceEqual(rows.Take(1)), "return a whole prefix in its original order");
+        Check((int)source["nextCursor"] == originalCursor && ReferenceEquals(fields["entries"], rows), "capping must leave its input intact");
+    }
+
+    private static void CheckNestedReplyBudget()
+    {
+        var rooms = new Dictionary<string, object>
+        {
+            { "items", new[] { new string('x', MinimumReplyBudget), "small later row" } },
+            { "truncated", true }, { "nextCursor", NextCursor }
+        };
+        var source = new Dictionary<string, object> { { "data", new Dictionary<string, object> { { "rooms", rooms } } } };
+        var reply = Json.Deserialize<Dictionary<string, object>>(BudgetedReply(source, MinimumReplyBudget, "rooms"));
+        var page = (Dictionary<string, object>)Data(reply)["rooms"];
+        var budget = (Dictionary<string, object>)reply["budget"];
+        Check(Rows(page["items"]).Count == 0 && !page.ContainsKey("nextCursor"), "an oversized first row must not be skipped or returned as a repeating cursor");
+        Check((bool)page["truncated"] && (string)budget["rowsField"] == "rooms.items", "describe the nested omitted rows");
+    }
+
+    private static void CheckExactReplyBudget()
+    {
+        var fields = new Dictionary<string, object> { { "value", "" } };
+        var source = new Dictionary<string, object> { { "data", fields }, { "truncated", false } };
+        int padding = MinimumReplyBudget - BudgetedReply(source, MinimumReplyBudget).Length;
+        fields["value"] = new string('x', padding);
+        string exact = BudgetedReply(source, MinimumReplyBudget);
+        Check(exact.Length == MinimumReplyBudget && !exact.Contains("budget"), "accept a reply exactly at the limit");
+        fields["value"] += "x";
+        var capped = Json.Deserialize<Dictionary<string, object>>(BudgetedReply(source, MinimumReplyBudget));
+        var budget = (Dictionary<string, object>)capped["budget"];
+        Check((bool)capped["truncated"] && !Data(capped).ContainsKey("value"), "omit a section one byte over the limit");
+        Check(Rows(budget["omittedFields"]).Cast<string>().SequenceEqual(new[] { "value" }), "name the omitted section");
+    }
+
+    private static string BudgetedReply(Dictionary<string, object> source, int maxBytes, string field = null)
+    {
+        var uri = new Uri("http://localhost/v1/example?cursor=" + FirstCursor + "&maxBytes=" + maxBytes);
+        object request = Invoke("RiMCP.Read.ReadRequest", "FromUri", uri);
+        return (string)Invoke("RiMCP.Read.ReadReplyBudget", "Serialize", source, request, field, null);
     }
 
     private static ResearchProjectDef Project(string name)

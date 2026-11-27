@@ -36,7 +36,7 @@ namespace RiMCP.Read
                     Dto.Field("message", entry.Message),
                     Dto.Field("repeats", entry.Repeats),
                     Dto.Field("stackTrace", includeStackTrace ? entry.StackTrace : null))).ToArray())),
-                page.Truncated, page.NextCursor);
+                page.Truncated, page.NextCursor, "entries");
         }
 
         private static List<LogEntry> Snapshot(bool includeStackTrace)

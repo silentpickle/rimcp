@@ -20,7 +20,7 @@ namespace RiMCP.Read
                 Dto.Field("grids", page.Items.Select(SerializePowerNet).ToArray()),
                 Dto.Field("components", context.Request.Detail == ReadDetail.Summary ? null : SerializePowerComponents(context.Map))),
                 page.Truncated,
-                page.NextCursor);
+                page.NextCursor, "grids");
         }
 
         public static object SummarizePower(Map map)

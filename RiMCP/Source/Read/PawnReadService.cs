@@ -46,7 +46,7 @@ namespace RiMCP.Read
                 data["assignmentOptions"] = SerializeAssignmentOptions(context.Map);
             }
 
-            return ReadEnvelope.Ok(context, data, page.Truncated, page.NextCursor);
+            return ReadEnvelope.Ok(context, data, page.Truncated, page.NextCursor, "pawns");
         }
 
         public static BridgeResponse GetPawn(BridgeRequest request, RouteMatch route)

@@ -43,7 +43,7 @@ namespace RiMCP.Read
                 Dto.Field("category", category),
                 Dto.Field("buildings", page.Items.Select(building => SerializeBuilding(building, context.Request.Detail, includeContents)).ToArray())),
                 page.Truncated,
-                page.NextCursor);
+                page.NextCursor, "buildings");
         }
 
         public static BridgeResponse GetBuilding(BridgeRequest request, RouteMatch route)

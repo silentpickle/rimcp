@@ -19,7 +19,7 @@ namespace RiMCP.Read
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("zones", page.Items.Select(record => SerializeZone(record, context.Request.Detail)).ToArray())),
                 page.Truncated,
-                page.NextCursor);
+                page.NextCursor, "zones");
         }
 
         public static BridgeResponse GetZone(BridgeRequest request, RouteMatch route)

@@ -35,7 +35,7 @@ namespace RiMCP.Read
                 Dto.Field("blockers", colony ? Blockers.ToArray(ResearchBlockers()) : null),
                 Dto.Field("projects", page.Items.Select(project => SerializeProject(project, context.Request.Detail)).ToArray())),
                 page.Truncated,
-                page.NextCursor);
+                page.NextCursor, "projects");
         }
 
         // Why research is not progressing: no project, no bench the project can use (the bench

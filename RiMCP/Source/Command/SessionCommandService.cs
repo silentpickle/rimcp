@@ -28,7 +28,8 @@ namespace RiMCP.Command
         public static BridgeResponse GetOperation(BridgeRequest request, RouteMatch route)
         {
             Operation operation = FindOperation(route["operationId"]);
-            return WithWait(request, operation, () => Envelope(false, Serialize(operation)));
+            ReadRequest query = ReadRequest.FromUri(request.Uri);
+            return WithWait(request, operation, () => Envelope(false, Serialize(operation), query));
         }
 
         // Permission follows the target: the router admits this as an Observe tool, and stopping any
@@ -87,7 +88,7 @@ namespace RiMCP.Command
                 Dto.Field("loadedColony", colony ? Dto.Obj(
                     Dto.Field("commitmentMode", Current.Game.Info.permadeathMode),
                     Dto.Field("commitmentSave", Current.Game.Info.permadeathMode ? Current.Game.Info.permadeathModeUniqueName : null)) : null),
-                Dto.Field("saves", saves)), page.Truncated, page.NextCursor);
+                Dto.Field("saves", saves)), page.Truncated, page.NextCursor, "saves");
         }
 
         public static BridgeResponse SaveGame(BridgeRequest request, RouteMatch route)
@@ -595,18 +596,19 @@ namespace RiMCP.Command
             return string.IsNullOrWhiteSpace(saveFirst) ? "" : ", saving first as '" + saveFirst.Trim() + "'";
         }
 
-        internal static BridgeResponse Envelope(bool changed, object data)
+        internal static BridgeResponse Envelope(bool changed, object data, ReadRequest query = null)
         {
             bool settled = !LongEventHandler.AnyEventNowOrWaiting && !OperationRunner.ReplacingGame && Current.ProgramState != ProgramState.MapInitializing;
             Game game = settled ? Current.Game : null;
-            object envelope = Dto.Obj(
+            Dictionary<string, object> envelope = Dto.Obj(
                 Dto.Field("schemaVersion", "1"),
                 Dto.Field("loadId", game == null ? null : GameContext.LoadId),
                 Dto.Field("tick", game != null && Current.ProgramState == ProgramState.Playing ? (object)Find.TickManager.TicksGame : null),
                 Dto.Field("programState", Current.ProgramState.ToString()),
                 Dto.Field("changed", changed),
                 Dto.Field("data", data));
-            BridgeResponse response = BridgeResponse.Json(200, Json.Serialize(envelope));
+            string body = query == null ? Json.Serialize(envelope) : ReadReplyBudget.Serialize(envelope, query);
+            BridgeResponse response = BridgeResponse.Json(200, body);
             response.Changed = changed;
             return response;
         }

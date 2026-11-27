@@ -129,6 +129,14 @@ namespace RiMCP.Shared
         }
     }
 
+    internal static class ReplyLimits
+    {
+        public const string Argument = "maxBytes";
+        public const int MinBytes = 1024;
+        public const int DefaultBytes = 4096;
+        public const int MaxBytes = 32768;
+    }
+
     internal static class ToolManifest
     {
         public const string Version = "1";
@@ -316,7 +324,7 @@ namespace RiMCP.Shared
         // Setup commands, likewise, act on the setup at a revision rather than on a loaded game.
         private static ToolSpec PostAnyGame(string group, string handlerId, string name, string description, string pathTemplate, Dictionary<string, object> inputSchema, Dictionary<string, object> annotations, string[] bodyKeys, params string[] queryKeys)
         {
-            return new ToolSpec(handlerId, group, name, description, "POST", pathTemplate, queryKeys, bodyKeys, inputSchema, annotations, true);
+            return new ToolSpec(handlerId, group, name, description, "POST", pathTemplate, queryKeys, bodyKeys, WithReplyLimit(inputSchema), annotations, true);
         }
 
         private static Dictionary<string, object> RequestIdProperty()
@@ -708,17 +716,28 @@ namespace RiMCP.Shared
 
         private static ToolSpec Get(string group, string handlerId, string name, string description, string pathTemplate, Dictionary<string, object> inputSchema, params string[] extraQueryKeys)
         {
-            return new ToolSpec(handlerId, group, name, description, "GET", pathTemplate, SharedReadKeys.Concat(extraQueryKeys).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(), new string[0], inputSchema, ReadOnly(), true);
+            string[] queryKeys = SharedReadKeys.Concat(extraQueryKeys).Append(ReplyLimits.Argument)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            return new ToolSpec(handlerId, group, name, description, "GET", pathTemplate, queryKeys, new string[0], WithReplyLimit(inputSchema), ReadOnly(), true);
         }
 
         private static ToolSpec Put(string group, string handlerId, string name, string description, string pathTemplate, Dictionary<string, object> inputSchema, Dictionary<string, object> annotations, string[] bodyKeys)
         {
-            return new ToolSpec(handlerId, group, name, description, "PUT", pathTemplate, new string[0], WithLoadGuard(inputSchema, bodyKeys), inputSchema, annotations, true);
+            return new ToolSpec(handlerId, group, name, description, "PUT", pathTemplate, new string[0], WithLoadGuard(inputSchema, bodyKeys), WithReplyLimit(inputSchema), annotations, true);
         }
 
         private static ToolSpec Post(string group, string handlerId, string name, string description, string pathTemplate, Dictionary<string, object> inputSchema, Dictionary<string, object> annotations, string[] bodyKeys, params string[] queryKeys)
         {
-            return new ToolSpec(handlerId, group, name, description, "POST", pathTemplate, queryKeys, WithLoadGuard(inputSchema, bodyKeys), inputSchema, annotations, true);
+            return new ToolSpec(handlerId, group, name, description, "POST", pathTemplate, queryKeys, WithLoadGuard(inputSchema, bodyKeys), WithReplyLimit(inputSchema), annotations, true);
+        }
+
+        private static Dictionary<string, object> WithReplyLimit(Dictionary<string, object> schema)
+        {
+            var properties = (Dictionary<string, object>)schema["properties"];
+            var limit = Int("UTF-8 byte budget for the tool's game payload. A capped reply describes what was omitted.", ReplyLimits.MinBytes, ReplyLimits.MaxBytes);
+            limit["default"] = ReplyLimits.DefaultBytes;
+            properties[ReplyLimits.Argument] = limit;
+            return schema;
         }
 
         // Writes accept the loadId from an earlier response; the bridge refuses them after another load.

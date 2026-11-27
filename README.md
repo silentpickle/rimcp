@@ -40,6 +40,10 @@ Most tools accept the same optional read controls:
 - `limit` and `cursor`: page large lists deterministically.
 - `idsOnly`: return identifiers only when supported by the list tool.
 
+Tool payloads default to 4,096 UTF-8 bytes. Set `maxBytes` from 1,024 to 32,768 to change the budget. Capped reads report `truncated: true` and a `budget` with the omitted fields or row count. If `nextCursor` appears, continue with the same filters and the returned cursor. For an omitted section or a page whose first row did not fit, retry using the original query with a larger budget, less detail, or narrower filters. For event history, keep the original `since` when the history section was omitted.
+
+The stdio proxy enforces a 64 KiB ceiling on bridge reply bodies and a 128 KiB ceiling on the MCP tool result, which can contain both text and structured JSON. A capped command payload keeps its success status and available receipt details. To recover more detail, reuse the original `requestId` with a larger budget where the tool supports safe retries. Otherwise, read back the game or operation state before repeating a command.
+
 Tool responses use a shared envelope:
 
 ```json

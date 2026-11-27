@@ -21,7 +21,7 @@ namespace RiMCP.Read
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("bills", page.Items.Select(record => SerializeBill(record, context.Request.Detail, inputs)).ToArray())),
                 page.Truncated,
-                page.NextCursor);
+                page.NextCursor, "bills");
         }
 
         public static BridgeResponse ListWorkshops(BridgeRequest request, RouteMatch route)
@@ -38,7 +38,7 @@ namespace RiMCP.Read
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("workshops", page.Items.Select(record => SerializeWorkshop(record, context.Request.Detail, includeRecipes, inputs)).ToArray())),
                 page.Truncated,
-                page.NextCursor);
+                page.NextCursor, "workshops");
         }
 
         public static BridgeResponse GetWorkshop(BridgeRequest request, RouteMatch route)

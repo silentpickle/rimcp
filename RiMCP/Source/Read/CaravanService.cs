@@ -21,7 +21,7 @@ namespace RiMCP.Read
             Page<Caravan> page = new Page<Caravan>(caravans, context.Request);
             return ReadEnvelope.Ok(context, Dto.Obj(Dto.Field("caravans",
                 page.Items.Select(caravan => Serialize(caravan, context.Request.Wants("inventory"))).ToArray())),
-                page.Truncated, page.NextCursor);
+                page.Truncated, page.NextCursor, "caravans");
         }
 
         public static BridgeResponse Preview(BridgeRequest request, RouteMatch route)

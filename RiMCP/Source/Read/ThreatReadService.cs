@@ -23,7 +23,7 @@ namespace RiMCP.Read
                 Dto.Field("summary", SummarizeThreats(context.Map)),
                 Dto.Field("threats", page.Items.Select(thing => thing is Pawn
                     ? SerializeThreatPawn(context.Map, (Pawn)thing, context.Request.Detail)
-                    : SerializeFire(context.Map, thing)).ToArray())), page.Truncated, page.NextCursor);
+                    : SerializeFire(context.Map, thing)).ToArray())), page.Truncated, page.NextCursor, "threats");
         }
 
         public static object SummarizeThreats(Map map)

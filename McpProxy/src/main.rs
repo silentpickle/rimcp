@@ -1,9 +1,11 @@
 mod manifest;
 mod play_metrics;
 mod protocol;
+mod reply_budget;
 
 use manifest::{Manifest, Tool};
 use protocol::{failure, result, tool_error};
+use reply_budget::{MAX_BRIDGE_REPLY_BYTES, MAX_TOOL_RESULT_BYTES};
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -16,7 +18,6 @@ use std::time::Duration;
 use ureq::http::{HeaderValue, Uri};
 
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
-const MAX_RESPONSE_BYTES: u64 = 16 * 1024 * 1024;
 const WORKERS: usize = 8;
 // How often the proxy asks RimMCP whether the tools that are on changed, by default.
 const ACCESS_POLL_SECONDS: u64 = 5;
@@ -257,7 +258,7 @@ impl Proxy {
         response
             .body_mut()
             .as_reader()
-            .take(MAX_RESPONSE_BYTES)
+            .take(MAX_BRIDGE_REPLY_BYTES)
             .read_to_end(&mut bytes)
             .ok()?;
         let access: Value = serde_json::from_slice(&bytes).ok()?;
@@ -459,6 +460,10 @@ impl Proxy {
             return failure(id, -32602, &format!("Unknown tool: {name}"));
         };
         let args = params.get("arguments").unwrap_or(&Value::Null);
+        let max_bytes = match reply_budget::requested(tool, args) {
+            Ok(bytes) => bytes,
+            Err(message) => return result(id, tool_error(&message)),
+        };
         let path = match build_path(tool, args) {
             Ok(Some(path)) => path,
             Ok(None) => return result(id, tool_error("Missing required argument.")),
@@ -489,24 +494,36 @@ impl Proxy {
             request = request.header("X-RimMCP-Client", client);
         }
         request = request.header("X-RimMCP-Session", self.session.as_str());
-        let received = (|| -> Result<(bool, String), ProxyError> {
+        let received = (|| -> Result<(bool, Option<String>), ProxyError> {
             let mut response = self.agent.run(request.body(data)?)?;
             let success = response.status().is_success();
             let mut bytes = Vec::new();
             response
                 .body_mut()
                 .as_reader()
-                .take(MAX_RESPONSE_BYTES + 1)
+                .take(MAX_BRIDGE_REPLY_BYTES + 1)
                 .read_to_end(&mut bytes)?;
-            if bytes.len() as u64 > MAX_RESPONSE_BYTES {
-                return Err(
-                    "Bridge response exceeds 16 MiB; use a smaller page or less detail.".into(),
-                );
+            if bytes.len() as u64 > MAX_BRIDGE_REPLY_BYTES {
+                return Ok((success, None));
             }
-            Ok((success, String::from_utf8(bytes)?))
+            Ok((success, Some(String::from_utf8(bytes)?)))
         })();
+        let read_only = matches!(tool.method, manifest::Method::Get);
         match received {
-            Ok((success, text)) => result(id, self.tool_reply(name, success, text)),
+            Ok((success, Some(text))) => result(
+                id,
+                self.tool_reply(name, read_only, success, text, max_bytes),
+            ),
+            Ok((success, None)) => result(
+                id,
+                reply_budget::omitted(
+                    read_only,
+                    success,
+                    MAX_BRIDGE_REPLY_BYTES,
+                    "bridgeReply",
+                    &Value::Null,
+                ),
+            ),
             Err(error) => result(
                 id,
                 tool_error(&format!(
@@ -516,17 +533,24 @@ impl Proxy {
             ),
         }
     }
-    fn tool_reply(&self, name: &str, success: bool, mut text: String) -> Value {
+    fn tool_reply(
+        &self,
+        name: &str,
+        read_only: bool,
+        success: bool,
+        mut text: String,
+        max_bytes: u64,
+    ) -> Value {
         let mut structured: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-        if success {
-            let rate = self
-                .play_metrics
-                .lock()
-                .ok()
-                .and_then(|mut metrics| metrics.record(&structured, text.len() as u64));
-            if play_metrics::annotate(&mut structured, name, rate) {
-                text = structured.to_string();
-            }
+        let wire_bytes = text.len() as u64;
+        let rate = success
+            .then(|| self.record_reply(&structured, wire_bytes))
+            .flatten();
+        if wire_bytes > max_bytes {
+            return reply_budget::omitted(read_only, success, max_bytes, "reply", &structured);
+        }
+        if success && play_metrics::annotate(&mut structured, name, rate) {
+            text = structured.to_string();
         }
         let mut content =
             vec![json!({"type": "text", "text": summarize(name, &structured, success)})];
@@ -537,7 +561,20 @@ impl Proxy {
         if !structured.is_null() {
             value["structuredContent"] = structured;
         }
+        if value.to_string().len() > MAX_TOOL_RESULT_BYTES {
+            return reply_budget::omitted(
+                read_only,
+                success,
+                MAX_TOOL_RESULT_BYTES as u64,
+                "toolResult",
+                &value["structuredContent"],
+            );
+        }
         value
+    }
+
+    fn record_reply(&self, structured: &Value, bytes: u64) -> Option<u64> {
+        self.play_metrics.lock().ok()?.record(structured, bytes)
     }
 }
 
@@ -791,6 +828,8 @@ mod tests {
                                 r#"{"error":"Unknown endpoint."}"#.to_string(),
                             ),
                         }
+                    } else if request_line.contains("/v1/oversized") {
+                        ("200 OK", oversized_bridge_body())
                     } else {
                         ("200 OK", r#"{"tick":1}"#.to_string())
                     };
@@ -850,6 +889,86 @@ mod tests {
             session: "test".into(),
             play_metrics: Mutex::default(),
         })
+    }
+
+    fn oversized_bridge_body() -> String {
+        const EXTRA_BYTE: usize = 1;
+        " ".repeat(MAX_BRIDGE_REPLY_BYTES as usize + EXTRA_BYTE)
+    }
+
+    #[test]
+    fn l2_bridge_ceiling() {
+        let (mut proxy, _) = bridge_proxy();
+        let first = Arc::get_mut(&mut proxy)
+            .unwrap()
+            .manifest
+            .tools
+            .first_mut()
+            .unwrap();
+        first.path_template = "/v1/oversized".into();
+        let name = first.name.clone();
+        let id = json!(1);
+        let reply = proxy.call(&id, &json!({"name": name}));
+        assert_eq!(reply["result"]["isError"], true);
+        assert_eq!(
+            reply["result"]["structuredContent"]["budget"]["scope"],
+            "bridgeReply"
+        );
+    }
+
+    #[test]
+    fn l2_command_receipt() {
+        const BUDGET: u64 = 1024;
+        let proxy = disconnected_proxy();
+        let body = json!({"changed": true, "data": {
+            "operationId": "op-1", "state": "queued", "result": "x".repeat(BUDGET as usize)
+        }})
+        .to_string();
+        let reply = proxy.tool_reply("load_game", false, true, body.clone(), BUDGET);
+        assert_eq!(reply["isError"], false);
+        assert_eq!(reply["structuredContent"]["changed"], true);
+        assert_eq!(reply["structuredContent"]["data"]["operationId"], "op-1");
+        assert_eq!(reply["structuredContent"]["truncated"], true);
+        assert!(reply["structuredContent"]["data"].get("result").is_none());
+
+        let full = proxy.tool_reply("load_game", false, true, body.clone(), body.len() as u64);
+        assert!(full["structuredContent"]["data"].get("result").is_some());
+        assert!(full["structuredContent"].get("truncated").is_none());
+    }
+
+    #[test]
+    fn l2_result_ceiling() {
+        const JSON_ESCAPE_BYTES: usize = 2;
+        const ENVELOPE_RESERVE: usize = 128;
+        let escaped_chars = MAX_BRIDGE_REPLY_BYTES as usize / JSON_ESCAPE_BYTES - ENVELOPE_RESERVE;
+        let body = json!({"data": "\\".repeat(escaped_chars)}).to_string();
+        let proxy = disconnected_proxy();
+        let reply = proxy.tool_reply("legacy_read", true, true, body, MAX_BRIDGE_REPLY_BYTES);
+        assert_eq!(reply["structuredContent"]["budget"]["scope"], "toolResult");
+        assert!(reply.to_string().len() <= MAX_TOOL_RESULT_BYTES);
+    }
+
+    #[test]
+    fn l2_manifest_budget() {
+        let manifest = Manifest::load().unwrap();
+        let args = json!({"maxBytes": 2048});
+        for tool in &manifest.tools {
+            let schema = &tool.input_schema["properties"]["maxBytes"];
+            assert_eq!(
+                reply_budget::requested(tool, &Value::Null),
+                Ok(schema["default"].as_u64().unwrap())
+            );
+            assert_eq!(
+                reply_budget::requested(tool, &args),
+                Ok(args["maxBytes"].as_u64().unwrap())
+            );
+            assert!(reply_budget::requested(tool, &json!({"maxBytes": 0})).is_err());
+            assert_eq!(
+                tool.query_keys.iter().any(|key| key == "maxBytes"),
+                matches!(tool.method, manifest::Method::Get)
+            );
+            assert!(!tool.body_keys.iter().any(|key| key == "maxBytes"));
+        }
     }
 
     fn listed_names(proxy: &Proxy) -> Vec<String> {

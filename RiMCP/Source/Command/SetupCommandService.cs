@@ -34,13 +34,14 @@ namespace RiMCP.Command
                     Dto.Field("supported", manual.Length == 0),
                     Dto.Field("manualScreens", manual.Length == 0 ? null : manual));
             }).ToArray();
-            return ReadEnvelope.Ok(context, Dto.Obj(Dto.Field("scenarios", rows)), page.Truncated, page.NextCursor);
+            return ReadEnvelope.Ok(context, Dto.Obj(Dto.Field("scenarios", rows)), page.Truncated, page.NextCursor, "scenarios");
         }
 
         public static BridgeResponse GetSetup(BridgeRequest request, RouteMatch route)
         {
             SetupController.Observe();
-            return SessionCommandService.Envelope(false, State(ReadContext.From(request).Request.Wants("preceptOptions")));
+            ReadRequest query = ReadRequest.FromUri(request.Uri);
+            return SessionCommandService.Envelope(false, State(query.Wants("preceptOptions")), query);
         }
 
         public static BridgeResponse StartSetup(BridgeRequest request, RouteMatch route)

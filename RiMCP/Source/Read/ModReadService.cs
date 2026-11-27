@@ -39,7 +39,7 @@ namespace RiMCP.Read
             data["mods"] = context.Request.IdsOnly
                 ? (object)page.Items.Select(mod => mod.PackageId).ToArray()
                 : page.Items.Select(mod => SerializeMod(mod, snapshot)).ToArray();
-            return ReadEnvelope.Ok(context, data, page.Truncated, page.NextCursor);
+            return ReadEnvelope.Ok(context, data, page.Truncated, page.NextCursor, "mods");
         }
 
         public static BridgeResponse GetMod(BridgeRequest request, RouteMatch route)

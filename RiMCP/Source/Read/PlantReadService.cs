@@ -42,7 +42,7 @@ namespace RiMCP.Read
             Page<Plant> page = new Page<Plant>(ordered, query);
             object[] rows = page.Items.Select(plant =>
                 query.IdsOnly ? (object)ReadUtil.ThingId(plant) : Serialize(plant, map)).ToArray();
-            return ReadEnvelope.Ok(context, Dto.Obj(Dto.Field("plants", rows)), page.Truncated, page.NextCursor);
+            return ReadEnvelope.Ok(context, Dto.Obj(Dto.Field("plants", rows)), page.Truncated, page.NextCursor, "plants");
         }
 
         private static object Serialize(Plant plant, Map map)

@@ -182,7 +182,7 @@ namespace RiMCP.Read
         public int? NextCursor;
         public object Data;
 
-        public static BridgeResponse Ok(ReadContext context, object data, bool truncated = false, int? nextCursor = null)
+        public static BridgeResponse Ok(ReadContext context, object data, bool truncated = false, int? nextCursor = null, string pageField = null, string detailSection = null)
         {
             ReadEnvelope envelope = new ReadEnvelope
             {
@@ -192,10 +192,10 @@ namespace RiMCP.Read
                 NextCursor = nextCursor,
                 Data = data
             };
-            return BridgeResponse.Json(200, Json.Serialize(envelope.ToDto()));
+            return BridgeResponse.Json(200, ReadReplyBudget.Serialize(envelope.ToDto(), context.Request, pageField, detailSection));
         }
 
-        private object ToDto()
+        private Dictionary<string, object> ToDto()
         {
             Dictionary<string, object> dto = Dto.Obj(
                 Dto.Field("schemaVersion", SchemaVersion),

@@ -143,7 +143,7 @@ namespace RiMCP.Command
                     Dto.Field("paused", ticks.Paused),
                     Dto.Field("forcedNormalSpeed", ticks.slower.ForcedNormalSpeed),
                     Dto.Field("blockedBy", BlockingWindows.Describe()))),
-                Dto.Field("run", run == null ? null : SerializeRun(run))));
+                Dto.Field("run", run == null ? null : SerializeRun(run))), detailSection: "run.events");
         }
 
         private static double WaitSeconds(BridgeRequest request)
