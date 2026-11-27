@@ -23,6 +23,8 @@ namespace RiMCP.Read
                 Dto.Field("programState", Current.ProgramState.ToString()),
                 Dto.Field("world", SerializeWorldInfo()),
                 Dto.Field("time", SerializeTime(context.Tick, context.Map)),
+                Dto.Field("playMetrics", PlayTime.Describe()),
+                Dto.Field("build", BuildIdentity.Describe()),
                 Dto.Field("currentMap", ReadUtil.MapSummary(context.Map)),
                 Dto.Field("maps", maps),
                 Dto.Field("storyteller", SerializeStoryteller()),

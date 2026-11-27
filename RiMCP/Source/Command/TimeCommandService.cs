@@ -173,6 +173,7 @@ namespace RiMCP.Command
                 Dto.Field("startTick", run.StartTick),
                 Dto.Field("targetTick", run.TargetTick),
                 Dto.Field("tick", tick),
+                Dto.Field("playMetrics", ReferenceEquals(Current.Game, run.Game) ? PlayTime.Describe() : null),
                 Dto.Field("stopOn", AdvanceRun.Conditions.Where(run.StopOn.Contains).ToArray()),
                 Dto.Field("endReason", running ? null : run.EndReason),
                 Dto.Field("stoppedBy", run.StoppedBy == null ? null : SerializeEvent(run.StoppedBy)),

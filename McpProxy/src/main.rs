@@ -1,4 +1,5 @@
 mod manifest;
+mod play_metrics;
 mod protocol;
 
 use manifest::{Manifest, Tool};
@@ -44,6 +45,7 @@ struct Proxy {
     // RimMCP's agent log can say who acted.
     client: Mutex<Option<String>>,
     session: String,
+    play_metrics: Mutex<play_metrics::PlayMetrics>,
 }
 
 enum Dispatch {
@@ -233,6 +235,7 @@ impl Proxy {
             notified: Mutex::new(None),
             client: Mutex::new(None),
             session: session_id(),
+            play_metrics: Mutex::default(),
         })
     }
 
@@ -503,19 +506,7 @@ impl Proxy {
             Ok((success, String::from_utf8(bytes)?))
         })();
         match received {
-            Ok((success, text)) => {
-                let structured: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-                let mut content =
-                    vec![json!({"type": "text", "text": summarize(name, &structured, success)})];
-                if !text.trim().is_empty() {
-                    content.push(json!({"type": "text", "text": text}));
-                }
-                let mut value = json!({"content": content, "isError": !success});
-                if !structured.is_null() {
-                    value["structuredContent"] = structured;
-                }
-                result(id, value)
-            }
+            Ok((success, text)) => result(id, self.tool_reply(name, success, text)),
             Err(error) => result(
                 id,
                 tool_error(&format!(
@@ -524,6 +515,29 @@ impl Proxy {
                 )),
             ),
         }
+    }
+    fn tool_reply(&self, name: &str, success: bool, mut text: String) -> Value {
+        let mut structured: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+        if success {
+            let rate = self
+                .play_metrics
+                .lock()
+                .ok()
+                .and_then(|mut metrics| metrics.record(&structured, text.len() as u64));
+            if play_metrics::annotate(&mut structured, name, rate) {
+                text = structured.to_string();
+            }
+        }
+        let mut content =
+            vec![json!({"type": "text", "text": summarize(name, &structured, success)})];
+        if !text.trim().is_empty() {
+            content.push(json!({"type": "text", "text": text}));
+        }
+        let mut value = json!({"content": content, "isError": !success});
+        if !structured.is_null() {
+            value["structuredContent"] = structured;
+        }
+        value
     }
 }
 
@@ -672,6 +686,7 @@ mod tests {
             notified: Mutex::new(None),
             client: Mutex::new(None),
             session: "test".into(),
+            play_metrics: Mutex::default(),
         }
     }
 
@@ -833,6 +848,7 @@ mod tests {
             notified: Mutex::new(None),
             client: Mutex::new(None),
             session: "test".into(),
+            play_metrics: Mutex::default(),
         })
     }
 

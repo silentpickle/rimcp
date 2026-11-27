@@ -172,6 +172,11 @@ RimWorld 1.7 puts its assemblies in the game root and uses .NET 10 with `UnitySt
 
 Without a 1.6 installation, the `ref/net472` folder of the [Krafs.Rimworld.Ref](https://www.nuget.org/packages/Krafs.Rimworld.Ref) package, version 1.6, works as `RimWorldManagedPath`. The **CI** workflow builds the mod against it, and checks and tests the MCP helper, on every push and pull request. The compatibility tests in `tests/CompatibilityRegression` run real game code, so they need a 1.6 installation and run locally.
 
+On macOS, run `scripts/check-rimcp.sh` with the game installed through Steam, or pass the path to a RimWorld 1.6 `Data/Managed` directory. The script builds the mod, runs the proxy tests, and runs the compatibility checks under Mono. It requires the .NET SDK, Cargo, Mono, and ripgrep.
+
+`get_game_context` reports the DLL's SHA-256 and enabled access groups in `build`. The stdio proxy adds its version. On a loaded game, `playMetrics` reports wall seconds since load and the running share (0 to 1), sampled on the game thread. Advance summaries include a current sample for the same load. The stdio proxy also reports `replyBytesPerGameHour` once its observed tick range is positive. This rate uses UTF-8 bridge response body bytes, including the current reply, for successful tool replies carrying that load ID and tick. Each proxy process measures its own traffic, and the same load starts a new measurement when the proxy restarts.
+
+
 Build and publish the MCP proxy for the current platform:
 
 ```sh

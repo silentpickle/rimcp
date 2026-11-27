@@ -26,6 +26,7 @@ namespace RiMCP
 
         private void Update()
         {
+            PlayTime.Sample();
             AdvanceRunner.Update();
             OperationRunner.Update();
             Interactions.Update();
@@ -38,11 +39,13 @@ namespace RiMCP
             // Read after handling requests: set_game_settings may have just turned this off, and an
             // unfocused game stops calling Update before the next frame.
             BridgeRuntime.SetRunInBackground(Application.runInBackground);
+            PlayTime.Sample();
         }
 
         private void OnApplicationFocus(bool focused)
         {
             BridgeRuntime.SetApplicationFocused(focused);
+            PlayTime.Sample();
         }
 
         private void OnApplicationQuit()

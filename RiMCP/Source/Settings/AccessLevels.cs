@@ -167,6 +167,11 @@ namespace RiMCP.Settings
             Enabled = enabled;
         }
 
+        public string[] EnabledGroups()
+        {
+            return ToolGroups.All.Where(Allows).ToArray();
+        }
+
         // Whether the group is on as a whole. Bridge routes outside any group, such as the access
         // endpoint, are reachable whenever RimMCP is enabled.
         public bool Allows(string group)

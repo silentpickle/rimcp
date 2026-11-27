@@ -398,8 +398,28 @@ internal static class Program
             }
             finally { Current.Game = null; }
         });
+        Test("L1_wall_accounting", CheckPlayTime);
         Console.WriteLine(passed + " passed; " + failed + " failed.");
         return failed == 0 ? 0 : 1;
+    }
+
+    private static void CheckPlayTime()
+    {
+        const long pausedAt = 10;
+        const long nextLoadAt = pausedAt + pausedAt;
+        const double halfRunning = 0.5;
+        Type type = mod.GetType("RiMCP.Read.PlayTime", true);
+        const BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic;
+        object clock = Activator.CreateInstance(type, true);
+        MethodInfo observe = type.GetMethod("Observe", instance);
+        PropertyInfo share = type.GetProperty("RunningShare", instance);
+        observe.Invoke(clock, new object[] { "first", 0L, true });
+        Check(share.GetValue(clock, null) == null, "no share before any time elapses");
+        observe.Invoke(clock, new object[] { "first", pausedAt, false });
+        observe.Invoke(clock, new object[] { "first", nextLoadAt, false });
+        Check((double)share.GetValue(clock, null) == halfRunning, "count paused time in the denominator");
+        observe.Invoke(clock, new object[] { "second", nextLoadAt, false });
+        Check(share.GetValue(clock, null) == null, "a new load starts with no samples");
     }
 
     private static ResearchProjectDef Project(string name)

@@ -41,7 +41,10 @@ $env:NUGET_PACKAGES = Join-Path $PWD '.nuget/packages'
 dotnet restore tests/CompatibilityRegression/CompatibilityRegression.csproj --source $env:NUGET_PACKAGES "-p:RimWorldManagedPath=$managed"
 ```
 
-The eighty-five checks cover:
+The eighty-six checks cover:
+
+- Running wall time as a share of elapsed wall time, including pauses, with
+  independent samples after each load.
 
 - Main-menu research listing, definition lookup, and definition search, including
   absence of invented `finished`/`progress` values and blockers, and `availableOnly`
