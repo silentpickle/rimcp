@@ -13,7 +13,7 @@ using System.Web.Script.Serialization;
 using RimWorld;
 using Verse;
 
-internal static class Program
+internal static partial class Program
 {
     private const BindingFlags Static = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
     private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
@@ -159,6 +159,8 @@ internal static class Program
         Test("a request timed out while queued never runs, and one already started returns its reply", CheckDispatcherTimeouts);
         Test("receipts and ended dialogs of another game are dropped, so it is not kept in memory", CheckOtherGamesForgotten);
         Test("an include section a tool does not list is refused with the ones it has", CheckIncludeRefusals);
+        Test("W1B_watch_priority", CheckAdvanceWatcherPriority);
+        Test("W1B_watch_limit", CheckAdvanceWatcherLimit);
         Test("advance runs complete at the target and end on outside changes", () =>
         {
             object game = new object();
