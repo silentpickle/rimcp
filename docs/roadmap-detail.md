@@ -16,9 +16,10 @@ Record each package's status, commit and date here. Keep the verification eviden
 - Implemented and verified November 26 in `c4d74b9`: **W2.4** thin whole-map survey and named tiles.
 - Implemented and verified November 26 in `65188cd`: **W2.5** mover groups and **W2.6** notable things and map-wide building reads.
 - Implemented November 27 through **W2.13**, including the advance summary and new stops. Verified the adopted research-complete dialog in the running game. [Wave 2 workflow and checks](wave-2-workflow.md)
-- Completed Wave 2 on November 27 in the local working tree. **W2.14** starts Ideology rituals and handles roles through the native ceremony. **W2.15** previews scenarios before setup. [Wave 2 workflow and checks](wave-2-workflow.md)
-- **W3.1** added the turn digest and revisioned survey and list reads. **W3.2–W3.12** add watcher-driven time, stock effects capture, construction planning, derived layers, structure templates, a source cache, thing notes, exports, suggested work priorities, and cooler and hunger checks. [Wave 3 workflow](wave-3-workflow.md)
-- **Wave 4** adds native caravan drafts and packing, food and spoilage estimates, departure and travel stops, and encounter reform. The Nov. 27 disposable round trip reached Swampston and returned to the loaded home map. [Campaign workflow](wave-4-campaign.md)
+- **W2.14**, **W2.15**, and **W3.1** landed November 27 in `dbe0621`. They add native Ideology rituals, setup scenario previews, a turn digest, and revisioned survey and list reads. [Wave 2 workflow and checks](wave-2-workflow.md)
+- **W3.2–W3.12** landed in `a89f235`. They add watcher-driven time, stock effects capture, construction planning, derived layers, structure templates, a [source cache and RimSage workflow](source-research.md), thing notes, exports, suggested work priorities, and cooler and hunger checks. [Wave 3 workflow](wave-3-workflow.md)
+- **Wave 4** landed in `a89f235`. It adds native caravan drafts and packing, food and spoilage estimates, departure and travel stops, and encounter reform. The Nov. 27 disposable round trip reached Swampston and returned to the loaded home map. [Campaign workflow](wave-4-campaign.md)
+- **Wave 5** has a role and verification plan. The scribe workflow can be used by the main agent with existing reads. Per-role enforcement, attribution, and multi-agent acceptance are planned.
 
 ## Critical path
 
@@ -151,23 +152,35 @@ One main agent handles time and decisions. Maintenance agents keep the colony op
 | Land advisor | Keeps `land-catalog.md` current from the survey and derived layers: soil, ore, build sites, chokepoints | Observe |
 | Steward | Bills, stockpiles, work priorities (from P6), growing zones, and power toggles, kept to standing goals the main agent set | Observe, Administration |
 | Builder | Turns an approved plan into blueprints through the plan evaluator, then watches it to completion (`built`) | Observe, Orders |
-| Researcher | Takes the survey's unresearched flags, runs see → research → note (D2, D5, D6), and writes thing notes. Proposes a typed tool only when the promotion test is met. | Observe, Diagnostics, plus decompiling outside the game |
-| Scribe | Keeps the colony diary and handoffs from the advance summaries, at the user's checkpoint cadence | Observe |
+| Researcher | Investigates unfamiliar things using live reads and a version-matched RimSage index. Records the method or Def and its observed implications in thing notes. | Observe, Diagnostics, and [RimSage](source-research.md#use-rimsage-with-rimmcp) |
+| Scribe | Records significant events, changes in colony status, save evidence, and open issues at the user's checkpoint cadence. | Selected Observe reads, optional `get_game_log`, and write access to the active colony's diary and handoffs |
 
 **Rules.**
 
 - One writer per kind of change. The steward owns bills and priorities, the builder owns blueprints, and the main agent owns pawn orders and time.
-- Every write carries a `requestId` with the agent's name, so the agent log shows who did what, and retries stay safe.
+- Use one stable role label per proxy instance, alongside the existing client and session identity. Every game mutation that supports `requestId` uses a stable ID for retries. Record role attribution separately from retry identity.
 - Maintenance agents never pause the game. If something needs a decision, they tell the main agent.
-- Each agent has a reply budget. Maintenance agents follow changes with `since`.
+- Each agent has a reply budget. Use cursor-based reads where supported. The main agent hands the scribe the digest and relevant command receipts it already has.
 
 **Packages.**
 
 | Pkg | Item | Grade | Risk | Depends | Main files |
 | --- | --- | --- | --- | --- | --- |
-| W5.1 | **Per-agent tool groups.** Tool groups are global mod settings today, and clients are only labelled by name. Add a proxy-side allowlist (an environment variable naming the groups), so each agent's proxy advertises and forwards only its own tools. The mod's global groups stay the outer limit. | 2 | L | – | Proxy `main.rs`, `manifest.rs` |
-| W5.2 | **Agent attribution.** The agent name in `requestId` and in the agent log, plus a per-agent line in L1's measurements | 1 | L | W0.1 | `AgentLog.cs`, `AgentClients.cs` |
-| W5.3 | **Usage guide.** The recommended setup above, written as a short doc and as ready-to-use agent definitions (prompts, tool groups, model tier) for Claude Code and Codex, checked on one live session with the main agent and two maintenance agents | 3 | M | W3.1, W3.2, W5.1 | Usage guide and agent definitions |
+| W5.1 | **Per-role tool access.** Export group membership in the proxy manifest. Configure a local allowlist by group or exact tool name. Apply it in both `tools/list` and `tools/call`; keep the mod's global access as the outer limit. Preserve unconfigured clients' behavior and reject invalid configured scopes at startup. | 2 | L | – | Shared manifest, manifest exporter, proxy |
+| W5.2 | **Role attribution.** Carry a configured role label alongside client and session through the proxy to the game log of agent actions. Report calls and reply bytes by role. Preserve request deduplication and operation receipts. | 2 | L | W0.1 | Proxy, `AgentLog.cs`, `AgentClients.cs`, play metrics |
+| W5.3 | **Client setup and live trial.** Provide Codex and Claude Code role definitions with tool scopes, handoff inputs, and model guidance. Verify the main agent, scribe, and one narrow maintenance role on a disposable save. | 3 | M | W3.2, W5.1, W5.2, W5.4 | Usage guide and agent definitions |
+| W5.4 | **Scribe checkpoints.** Start with existing observation tools and main-agent receipts. Validate incremental history, save verification, load changes, and a focused diagnostic log excerpt. | 2 | L | W2.2, W3.1 | Scribe workflow in the colony workspace, disposable-save evidence |
+
+Start W5.4 with a main-agent handoff while W5.1 and W5.2 are built. Use the results to set the scribe's tool scope and checkpoint budget for the W5.3 live trial.
+
+**Scribe inputs.** Use `get_turn_digest` as the short status read when the main agent has no digest to pass along. Expand risks and food with `get_colony_status` and inspect a particular run with `get_advance`. Use `get_events` for player-visible letters, messages, and history, with its own `since` cursor. Use `get_game_log` for a bounded warning or error excerpt when investigating a problem. Its offset is for paging retained diagnostic entries. Use command and operation receipts from the main agent for actor, outcome, and save evidence.
+
+**Verification.**
+
+1. Compare role tool lists with a globally disabled tool and with the game offline. Make a direct `tools/call` to a hidden mutation and confirm the request never reaches the bridge. Test one permitted call for each configured role. Keep the bridge token and broad proxy configuration in the trusted runner. Proxy scoping assumes roles access the game through their assigned proxy.
+2. Send allowed mutations from two roles. Match their activity entries and metrics to the right role and client session. Retry a mutation using its original request ID and check that it applies once.
+3. While the main agent owns the clock, collect a digest, a meaningful event, and a relevant diagnostic excerpt. Have the main agent verify a save and pass its receipt. Run the scribe twice on the same checkpoint evidence, then after a reload. Verify the diary stays free of duplicate events, marks any history gap, and identifies the observed tick and verified save separately.
+4. Compare the scribe's checkpoint reads and reply bytes with the main agent's baseline. Record what was reused, what required a follow-up read, and which client setups were exercised.
 
 ## Spike results
 

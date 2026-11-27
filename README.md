@@ -16,7 +16,7 @@ I want an agent to play a RimWorld colony across many sessions and eventually ma
 
 Advance runs can keep the game moving between turns and stop for events, such as a blueprint finishing or a caravan arriving. The fork adds construction planning, live reference exports, and caravan workflows from packing through return. The next roadmap phase gives the main agent and maintenance agents separate roles.
 
-[Roadmap overview](docs/roadmap.md) · [Detailed fork roadmap](docs/roadmap-detail.md) · [Survey workflow](docs/survey-workflow.md) · [Wave 2 workflow and verification](docs/wave-2-workflow.md) · [Wave 3 turns and planning](docs/wave-3-workflow.md) · [Wave 4 caravan workflow](docs/wave-4-campaign.md) · [Build this fork](#building-from-source)
+[Roadmap overview](docs/roadmap.md) · [Detailed fork roadmap](docs/roadmap-detail.md) · [Survey workflow](docs/survey-workflow.md) · [Wave 2 workflow and verification](docs/wave-2-workflow.md) · [Wave 3 turns and planning](docs/wave-3-workflow.md) · [Wave 4 caravan workflow](docs/wave-4-campaign.md) · [RimSage setup](docs/source-research.md#use-rimsage-with-rimmcp) · [Build this fork](#building-from-source)
 
 ## Current MCP tools
 

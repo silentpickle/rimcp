@@ -28,8 +28,8 @@ The survey disposable-save checks measured a **3,453-byte** overview with movers
 | --- | --- |
 | Make turns smaller and keep time moving | **W3.1** combines advance summaries and mover data into a digest targeted at 2 KiB or less, with revisions and deltas for follow-up reads. **W3.2** uses that digest and the expanded watchers to keep the game running between turns and pause on a condition. |
 | Plan against the map | The W2.3 terrain, use, and thing layers feed the shared preview evaluator, derived maps such as build sites and reachability, and reusable room templates. |
-| Explain unfamiliar things | Build on inspect text and info cards with reference exports and thing notes. Agents can then move from a survey result to the right detail or game action. |
-| Extend play to campaigns and multiple agents | The campaign uses the live loop for formation, travel, and return. Wave 5 puts time and decisions under one controller, with narrower tool access for maintenance agents. |
+| Explain unfamiliar things | Inspect text, info cards, and reference exports show the running game. RimSage provided searchable C# and shipped Def XML for questions about plant yield and native caravan arrival checks. Match the local source index to the game build being investigated. [RimSage setup and checks](source-research.md#use-rimsage-with-rimmcp) |
+| Run a campaign across sessions | Wave 4 covers formation, travel, and return. Wave 5 gives the main agent control of time and decisions, limits maintenance agents to their assigned tools, and gives the scribe a checkpoint workflow based on turn summaries, status, and game history. [Wave 5 scope and acceptance](roadmap-detail.md#wave-5--main-agent-and-maintenance-agents) |
 
 The survey and watcher table are the two inputs to the turn digest. Tool schemas enter through the shared manifest and the game bridge routes them to the native handlers. [Tool manifest](../Shared/ToolManifest.cs) · [Bridge routes](../RiMCP/Source/Bridge/BridgeRouter.cs) · [Survey](../RiMCP/Source/Read/MapSurveyReadService.cs) · [Watchers](../RiMCP/Source/Command/AdvanceWatchers.cs)
 
