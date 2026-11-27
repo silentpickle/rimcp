@@ -30,6 +30,8 @@ For scribe sessions with no diagnostics assignment, omit `get_game_log` from the
 
 Optional specialists can be assigned when a specific question or task comes up. Give Sentinel watcher stops and digests from main. Give Builder a scoped assignment and avoid overlapping writes with Steward. Builder can use the read-only placement check first. The `place_blueprint` tool supports both preview and submission, so granting it allows both.
 
+Assignments and reports should carry load ID, map ID, and evidence ticks. A role identifies the tick of each consequential observation or action receipt and, when available, its latest context tick and pause state before reporting. Main compares that evidence with current context and intervening actions before using it. Same-tick mutations can occur while paused; a timestamp alone does not establish freshness. Send urgent warnings immediately, and recheck action-specific preconditions. The full [report timing convention](../../rimworld/plan/wave-5-agents.md#report-timing-and-freshness) covers changed loads, multi-tick reports, and scribe checkpoints.
+
 ## Connect a client
 
 Build and use the updated mod DLL and native proxy. Use **Connection → Copy MCP config** in the running mod for the command, arguments, URL, and token. Keep the token in private settings or pass it from a trusted local process. The following examples use an absolute path to the native executable, with `RIMCP_URL` and `RIMCP_TOKEN` already in the launching process's environment.
