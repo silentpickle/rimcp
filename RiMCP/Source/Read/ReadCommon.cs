@@ -73,6 +73,40 @@ namespace RiMCP.Read
             return Query.TryGetValue(name, out value) ? value : null;
         }
 
+        internal ReadRequest Section(string name, string[] keys, string[] aliases)
+        {
+            string prefix = name + ".";
+            var section = new ReadRequest();
+            foreach (var pair in Query.Where(pair => pair.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                string key = pair.Key.Substring(prefix.Length);
+                if (!keys.Contains(key, StringComparer.OrdinalIgnoreCase))
+                {
+                    throw new BridgeException(400, "Unknown " + name + " field '" + key + "'.");
+                }
+                section.Query[key] = pair.Value;
+            }
+            if (section.Query.Count == 0)
+            {
+                return null;
+            }
+            if (aliases.Any(Query.ContainsKey))
+            {
+                throw new BridgeException(400, "Use " + name + " or its flat arguments.");
+            }
+            return section;
+        }
+
+        internal HashSet<ThingDef> MatchDefs(bool list)
+        {
+            if (list)
+            {
+                return new HashSet<ThingDef>(DefList<ThingDef>("def"));
+            }
+            ThingDef def = OptionalDef<ThingDef>("def");
+            return def == null ? new HashSet<ThingDef>() : new HashSet<ThingDef> { def };
+        }
+
         public int? OptionalInt(string name)
         {
             string text = Get(name);

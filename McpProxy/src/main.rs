@@ -639,15 +639,77 @@ fn query_value(value: &Value) -> Result<String, &'static str> {
     }
 }
 
+fn path_value(tool: &Tool, args: &Value, key: &str) -> Result<Option<String>, &'static str> {
+    let single = args.get(key).filter(|value| !value.is_null());
+    if tool.query_keys.iter().any(|key| key == "ids") {
+        if let Some(ids) = args.get("ids").filter(|value| !value.is_null()) {
+            if single.is_some() || !ids.as_array().is_some_and(|ids| valid_batch_ids(ids)) {
+                return Err("Give a single id or an array of nonempty ids without commas.");
+            }
+            return Ok(Some("~batch".to_string()));
+        }
+    }
+    Ok(match single {
+        Some(Value::String(text)) if !text.trim().is_empty() => Some(text.clone()),
+        Some(Value::Number(number)) => Some(number.to_string()),
+        _ => None,
+    })
+}
+
+fn valid_batch_ids(ids: &[Value]) -> bool {
+    !ids.is_empty()
+        && ids.iter().all(|id| {
+            id.as_str()
+                .is_some_and(|id| !id.trim().is_empty() && !id.contains(','))
+        })
+}
+
+fn append_query(
+    tool: &Tool,
+    query: &mut Vec<String>,
+    key: &str,
+    value: &Value,
+) -> Result<(), &'static str> {
+    let schema = &tool.input_schema.get("properties").unwrap_or(&Value::Null)[key];
+    if schema["type"] == "object" {
+        let Some(section) = value.as_object() else {
+            return Err("A selector must be an object.");
+        };
+        let before = query.len();
+        for (field, value) in section {
+            if schema["properties"].get(field).is_none() {
+                return Err("Unknown field in a selector.");
+            }
+            append_query_value(query, &format!("{key}.{field}"), value)?;
+        }
+        return if query.len() == before {
+            Err("Give at least one field in a selector.")
+        } else {
+            Ok(())
+        };
+    }
+    append_query_value(query, key, value)
+}
+
+fn append_query_value(
+    query: &mut Vec<String>,
+    key: &str,
+    value: &Value,
+) -> Result<(), &'static str> {
+    let encoded = query_value(value)?;
+    if !encoded.is_empty() || matches!(key, "ids" | "fields") {
+        query.push(format!("{}={}", escape(key), escape(&encoded)));
+    }
+    Ok(())
+}
+
 fn build_path(tool: &Tool, args: &Value) -> Result<Option<String>, &'static str> {
     let mut segments = Vec::new();
     for segment in tool.path_template.split('/') {
         if segment.starts_with('{') && segment.ends_with('}') && segment.len() > 2 {
-            // Ids typed as integers in a tool's schema arrive as numbers.
-            let value = match args.get(&segment[1..segment.len() - 1]) {
-                Some(Value::String(text)) if !text.trim().is_empty() => text.clone(),
-                Some(Value::Number(number)) => number.to_string(),
-                _ => return Ok(None),
+            let key = &segment[1..segment.len() - 1];
+            let Some(value) = path_value(tool, args, key)? else {
+                return Ok(None);
             };
             segments.push(escape(&value));
         } else {
@@ -662,10 +724,7 @@ fn build_path(tool: &Tool, args: &Value) -> Result<Option<String>, &'static str>
             continue;
         }
         if let Some(value) = args.get(key).filter(|value| !value.is_null()) {
-            let encoded = query_value(value)?;
-            if !encoded.is_empty() {
-                query.push(format!("{}={}", escape(key), escape(&encoded)));
-            }
+            append_query(tool, &mut query, key, value)?;
         }
     }
     if !query.is_empty() {
@@ -1222,6 +1281,53 @@ mod tests {
                 "{}: {path}",
                 tool.name
             );
+        }
+    }
+    #[test]
+    fn e7_selector_encoding() {
+        let manifest = Manifest::load().unwrap();
+        let tool = manifest
+            .tools
+            .iter()
+            .find(|tool| tool.name == "find_things")
+            .unwrap();
+        let args = json!({
+            "area": {"x": 12, "z": 7, "radius": 0},
+            "filter": {"query": "steel & slag", "def": ["Steel", "ChunkSlagSteel"], "forbidden": false},
+            "fields": ["id", "def", "cell"]
+        });
+        let path = build_path(tool, &args).unwrap().unwrap();
+        assert!(path.contains("area.radius=0&area.x=12&area.z=7"));
+        assert!(path.contains("filter.def=Steel%2CChunkSlagSteel&filter.forbidden=False"));
+        assert!(path.contains("filter.query=steel%20%26%20slag"));
+        assert!(path.contains("fields=id%2Cdef%2Ccell"));
+        assert!(build_path(tool, &json!({"area": "map"})).is_err());
+        assert!(build_path(tool, &json!({"area": {"unknown": true}})).is_err());
+    }
+
+    #[test]
+    fn e6_batch_routing() {
+        let manifest = Manifest::load().unwrap();
+        for (name, key) in [
+            ("get_pawn", "id"),
+            ("get_building", "id"),
+            ("list_gizmos", "thingId"),
+        ] {
+            let tool = manifest
+                .tools
+                .iter()
+                .find(|tool| tool.name == name)
+                .unwrap();
+            let batch = build_path(tool, &json!({"ids": ["first", "second", "first"]}))
+                .unwrap()
+                .unwrap();
+            assert!(batch.contains("/~batch"));
+            assert!(batch.ends_with("?ids=first%2Csecond%2Cfirst"));
+            let single = build_path(tool, &json!({key: "one"})).unwrap().unwrap();
+            assert!(single.contains("/one"));
+            assert!(build_path(tool, &json!({key: "one", "ids": ["two"]})).is_err());
+            assert!(build_path(tool, &json!({"ids": ["one,two"]})).is_err());
+            assert!(build_path(tool, &json!({"ids": []})).is_err());
         }
     }
 }

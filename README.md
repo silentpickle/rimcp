@@ -40,6 +40,10 @@ Most tools accept the same optional read controls:
 - `limit` and `cursor`: page large lists deterministically.
 - `idsOnly`: return identifiers only when supported by the list tool.
 
+`list_buildings`, `find_things`, and `list_plants` accept an `area` object and a `filter` object. For example, use `area: {"x":132,"z":90,"radius":8}` and `filter: {"def":["Steel","WoodLog"],"forbidden":false}` with `find_things`. Areas can also be rectangles, `{"map":true}`, or a room or zone ID from the corresponding read. `check_placement` accepts a rectangle or single cell in `area`. Use the flat arguments or the corresponding object on a given call.
+
+The building, thing, plant, and pawn lists accept `fields`. Select `["id","def","cell"]` for a compact row with the ID, defName and `{x,z}` cell. Other projected fields follow each tool's `detail` and `include`. `get_pawn`, `get_building`, and `list_gizmos` accept a single ID or up to 32 `ids`. Batch replies preserve input order and return missing IDs as per-row errors.
+
 Tool payloads default to 4,096 UTF-8 bytes. Set `maxBytes` from 1,024 to 32,768 to change the budget. Capped reads report `truncated: true` and a `budget` with the omitted fields or row count. If `nextCursor` appears, continue with the same filters and the returned cursor. For an omitted section or a page whose first row did not fit, retry using the original query with a larger budget, less detail, or narrower filters. For event history, keep the original `since` when the history section was omitted.
 
 The stdio proxy enforces a 64 KiB ceiling on bridge reply bodies and a 128 KiB ceiling on the MCP tool result, which can contain both text and structured JSON. A capped command payload keeps its success status and available receipt details. To recover more detail, reuse the original `requestId` with a larger budget where the tool supports safe retries. Otherwise, read back the game or operation state before repeating a command.

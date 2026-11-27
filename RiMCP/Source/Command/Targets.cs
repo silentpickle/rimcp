@@ -47,7 +47,7 @@ namespace RiMCP.Command
                 {
                     throw new CommandException(400, "Give " + field + "Id or a cell, not both.");
                 }
-                Thing thing = map.listerThings.AllThings.FirstOrDefault(each => (each.ThingID == thingId || each.GetUniqueLoadID() == thingId) && each.Spawned && !each.Position.Fogged(map));
+                Thing thing = FindVisibleThing(map, thingId);
                 if (thing == null)
                 {
                     throw new CommandException(404, "No thing '" + thingId + "' on this map.");
@@ -72,6 +72,11 @@ namespace RiMCP.Command
                 throw new CommandException(409, "That cell is unexplored.");
             }
             return cell;
+        }
+
+        internal static Thing FindVisibleThing(Map map, string thingId)
+        {
+            return map.listerThings.AllThings.FirstOrDefault(each => (each.ThingID == thingId || each.GetUniqueLoadID() == thingId) && each.Spawned && !each.Position.Fogged(map));
         }
 
         public static object Describe(LocalTargetInfo target)

@@ -129,6 +129,30 @@ namespace RiMCP.Shared
         }
     }
 
+    internal static class ReadShape
+    {
+        public const string BatchPathId = "~batch";
+        public const int MaxIds = 32;
+        private static readonly string[] Common = { "id", "def", "cell" };
+        public static readonly string[] BuildingFields = Common.Concat(new[] {
+            "ids", "position", "label", "hitPoints", "maxHitPoints", "faction", "stuff", "size",
+            "passability", "power", "battery", "fuel", "billGiver", "rotation", "temperatureControl", "contents", "pen"
+        }).ToArray();
+        public static readonly string[] ThingFields = Common.Concat(new[] {
+            "label", "x", "z", "count", "forbidden", "inStorage", "storage", "distance", "hitPoints", "maxHitPoints", "quality"
+        }).ToArray();
+        public static readonly string[] PlantFields = Common.Concat(new[] {
+            "label", "x", "z", "growth", "harvestable", "canYield", "isTree", "isStump",
+            "harvestProduct", "baseHarvestYield", "designations"
+        }).ToArray();
+        public static readonly string[] PawnFields = Common.Concat(new[] {
+            "ids", "name", "label", "role", "kindDef", "faction", "gender", "ageBiologicalYears", "downed",
+            "dead", "drafted", "position", "mentalState", "currentJob", "queuedJobs", "ideoligion", "needs",
+            "mood", "health", "skills", "traits", "work", "schedule", "assignments", "training", "gear", "inventory", "relations"
+        }).ToArray();
+        public static readonly string[] GizmoFields = Common.Concat(new[] { "thing", "revision", "gizmos" }).ToArray();
+    }
+
     internal static class ReplyLimits
     {
         public const string Argument = "maxBytes";
@@ -716,7 +740,8 @@ namespace RiMCP.Shared
 
         private static ToolSpec Get(string group, string handlerId, string name, string description, string pathTemplate, Dictionary<string, object> inputSchema, params string[] extraQueryKeys)
         {
-            string[] queryKeys = SharedReadKeys.Concat(extraQueryKeys).Append(ReplyLimits.Argument)
+            string[] extensions = AddReadShape(handlerId, inputSchema);
+            string[] queryKeys = SharedReadKeys.Concat(extraQueryKeys).Concat(extensions).Append(ReplyLimits.Argument)
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             return new ToolSpec(handlerId, group, name, description, "GET", pathTemplate, queryKeys, new string[0], WithReplyLimit(inputSchema), ReadOnly(), true);
         }
@@ -729,6 +754,83 @@ namespace RiMCP.Shared
         private static ToolSpec Post(string group, string handlerId, string name, string description, string pathTemplate, Dictionary<string, object> inputSchema, Dictionary<string, object> annotations, string[] bodyKeys, params string[] queryKeys)
         {
             return new ToolSpec(handlerId, group, name, description, "POST", pathTemplate, queryKeys, WithLoadGuard(inputSchema, bodyKeys), WithReplyLimit(inputSchema), annotations, true);
+        }
+
+        private static string[] AddReadShape(string handler, Dictionary<string, object> schema)
+        {
+            var props = (Dictionary<string, object>)schema["properties"];
+            switch (handler)
+            {
+                case "buildings": return AddSelector(props, ReadShape.BuildingFields, "category", "excludeDefs");
+                case "things": return AddSelector(props, ReadShape.ThingFields, "category", "excludeCategory", "query", "forbidden", "inStorage");
+                case "plants": return AddSelector(props, ReadShape.PlantFields, "harvestable", "canYield", "tree", "stump");
+                case "pawns": return AddFields(props, ReadShape.PawnFields);
+                case "pawn": return AddBatch(schema, props, "id", ReadShape.PawnFields);
+                case "building": return AddBatch(schema, props, "id", ReadShape.BuildingFields);
+                case "gizmos": return AddBatch(schema, props, "thingId", ReadShape.GizmoFields);
+                case "check-placement": return AddPlacementArea(schema, props);
+                default: return new string[0];
+            }
+        }
+
+        private static string[] AddSelector(Dictionary<string, object> props, string[] fields, params string[] filterKeys)
+        {
+            props["area"] = AreaSchema(false);
+            var filter = filterKeys.ToDictionary(key => key, key => props[key], StringComparer.Ordinal);
+            filter["def"] = StrArray("Exact defNames to include. Matches any of these.");
+            props["filter"] = ObjectSchema(filter);
+            return AddFields(props, fields).Concat(new[] { "area", "filter" }).ToArray();
+        }
+
+        private static Dictionary<string, object> AreaSchema(bool placement)
+        {
+            const int coordinate = 1000;
+            const int shapeSide = coordinate + 1;
+            const int placementSide = 20;
+            const int maximumRadius = 1500;
+            int side = placement ? placementSide : shapeSide;
+            var area = J(
+                F("x", Int("Cell or west edge.", 0, coordinate)),
+                F("z", Int("Cell or south edge.", 0, coordinate)),
+                F("width", Int("Rectangle width.", 1, side)),
+                F("height", Int("Rectangle height.", 1, side)));
+            if (placement)
+            {
+                return ObjectSchema(area, "x", "z");
+            }
+            area["radius"] = Int("Maximum distance from x and z.", 0, maximumRadius);
+            area["map"] = Bool("Use true for the whole map.");
+            area["room"] = Str("Room id from get_environment.");
+            area["zone"] = Str("Zone id from list_zones.");
+            return ObjectSchema(area);
+        }
+
+        private static string[] AddPlacementArea(Dictionary<string, object> schema, Dictionary<string, object> props)
+        {
+            props["area"] = AreaSchema(true);
+            schema["required"] = new[] { "def" };
+            schema["oneOf"] = A(J(F("required", A("x", "z"))), J(F("required", A("area"))));
+            return new[] { "area" };
+        }
+
+        private static string[] AddBatch(Dictionary<string, object> schema, Dictionary<string, object> props, string id, string[] fields)
+        {
+            props["ids"] = J(F("type", "array"), F("minItems", 1), F("maxItems", ReadShape.MaxIds),
+                F("items", J(F("type", "string"))),
+                F("description", "Read several IDs in input order. Use this or " + id + ". Missing IDs return per-entry errors."));
+            props["limit"] = Limit().Schema;
+            props["cursor"] = Cursor().Schema;
+            schema["required"] = new string[0];
+            schema["oneOf"] = A(J(F("required", A(id))), J(F("required", A("ids"))));
+            return AddFields(props, fields).Append("ids").ToArray();
+        }
+
+        private static string[] AddFields(Dictionary<string, object> props, string[] fields)
+        {
+            props["fields"] = J(F("type", "array"), F("minItems", 1),
+                F("items", J(F("type", "string"), F("enum", fields))),
+                F("description", "Return these fields only. id, def and cell are compact. Other fields follow detail and include."));
+            return new[] { "fields" };
         }
 
         private static Dictionary<string, object> WithReplyLimit(Dictionary<string, object> schema)

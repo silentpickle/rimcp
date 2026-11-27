@@ -103,15 +103,24 @@ namespace RiMCP.Read
         private static object SerializeRoom(Map map, Room room)
         {
             RoomRoleDef role = room.Role;
-            Region firstRegion = room.FirstRegion;
-            IntVec3? firstCell = firstRegion == null ? (IntVec3?)null : firstRegion.AnyCell;
             return Dto.Obj(
-                Dto.Field("id", firstCell.HasValue ? ReadUtil.StableSessionId("room", map.uniqueID, firstCell.Value, role == null ? null : role.defName) : null),
+                Dto.Field("id", RoomId(map, room, role)),
                 Dto.Field("role", role == null ? null : role.defName),
                 Dto.Field("cellCount", room.CellCount),
                 Dto.Field("openRoofCells", room.OpenRoofCount),
                 Dto.Field("temperatureC", room.Temperature),
                 Dto.Field("usesOutdoorTemperature", room.UsesOutdoorTemperature));
+        }
+
+        private static string RoomId(Map map, Room room, RoomRoleDef role)
+        {
+            Region region = room.FirstRegion;
+            return region == null ? null : ReadUtil.StableSessionId("room", map.uniqueID, region.AnyCell, role?.defName);
+        }
+
+        internal static Room FindRoom(Map map, string id)
+        {
+            return Rooms(map).FirstOrDefault(room => RoomId(map, room, room.Role) == id);
         }
 
         private static object SerializeHazards(Map map)

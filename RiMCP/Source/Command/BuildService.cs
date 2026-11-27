@@ -15,7 +15,6 @@ namespace RiMCP.Command
     internal static partial class BuildService
     {
         private const int MaxPlacements = 50;
-        private const int MaxCheckSide = 20;
         private const int MaxListedFits = 50;
         private const int MaxListedPerReason = 10;
 
@@ -29,24 +28,17 @@ namespace RiMCP.Command
                 throw new BridgeException(409, "check_placement uses the game's build tool, which works on the map shown in game (map " + Find.CurrentMap.uniqueID + "). Switch to map " + map.uniqueID + " in game first.");
             }
             BuildPlacement building = BuildPlacement.Resolve(query.Get("def"), query.Get("stuff"), query.Get("rotation"), "");
-            int? x = query.OptionalInt("x");
-            int? z = query.OptionalInt("z");
-            if (!x.HasValue || !z.HasValue)
-            {
-                throw new BridgeException(400, "Give x and z: the position to check, or the south-west corner of an area of positions.");
-            }
-            int width = Side(query, "width");
-            int height = Side(query, "height");
+            CellRect rect = ReadArea.Parse(context, LegacyArea.Placement).Rectangle.Value;
 
             // Positions nearest the middle of the area come first, so the first fit is the most central.
-            IntVec3 centre = new IntVec3(x.Value + width / 2, 0, z.Value + height / 2);
+            IntVec3 centre = new IntVec3(rect.minX + rect.Width / 2, 0, rect.minZ + rect.Height / 2);
             List<IntVec3> positions = new List<IntVec3>();
             int outside = 0;
-            for (int px = x.Value; px < x.Value + width; px++)
+            for (int dx = 0; dx < rect.Width; dx++)
             {
-                for (int pz = z.Value; pz < z.Value + height; pz++)
+                for (int dz = 0; dz < rect.Height; dz++)
                 {
-                    IntVec3 cell = new IntVec3(px, 0, pz);
+                    IntVec3 cell = new IntVec3(rect.minX + dx, 0, rect.minZ + dz);
                     if (cell.InBounds(map))
                     {
                         positions.Add(cell);
@@ -230,16 +222,6 @@ namespace RiMCP.Command
         {
             return string.Join(", ", defs.GroupBy(def => def).OrderByDescending(group => group.Count())
                 .Select(group => AgentLog.Count(group.Count(), group.Key.label, Find.ActiveLanguageWorker.Pluralize(group.Key.label, group.Count()))).ToArray());
-        }
-
-        private static int Side(ReadRequest query, string field)
-        {
-            int side = query.OptionalInt(field) ?? 1;
-            if (side < 1 || side > MaxCheckSide)
-            {
-                throw new BridgeException(400, "Field '" + field + "' must be 1 to " + MaxCheckSide + ".");
-            }
-            return side;
         }
 
         private static object Position(IntVec3 cell)

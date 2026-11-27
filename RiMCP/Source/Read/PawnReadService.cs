@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using RimWorld;
 using RiMCP.Bridge;
+using RiMCP.Shared;
 using Verse;
 
 namespace RiMCP.Read
@@ -33,9 +34,10 @@ namespace RiMCP.Read
 
             IEnumerable<PawnRole> source = PawnsForFilter(context.Map, filter);
             source = source.OrderBy(p => p.Role).ThenBy(p => p.Pawn.LabelShortCap);
+            ReadProjection fields = ReadProjection.Parse(context.Request, ReadShape.PawnFields);
             Page<PawnRole> page = new Page<PawnRole>(source, context.Request);
             object[] pawns = page.Items
-                .Select(role => context.Request.IdsOnly ? ReadUtil.ThingId(role.Pawn) : SerializePawn(role.Pawn, role.Role, context.Request.Detail, context.Request))
+                .Select(role => context.Request.IdsOnly ? ReadUtil.ThingId(role.Pawn) : ReadProjection.Serialize(fields, role.Pawn, () => SerializePawn(role.Pawn, role.Role, context.Request.Detail, context.Request)))
                 .ToArray();
 
             Dictionary<string, object> data = Dto.Obj(
@@ -54,16 +56,26 @@ namespace RiMCP.Read
             ReadContext context = ReadContext.FromMap(request);
             string id = route["id"];
 
+            ReadProjection fields = ReadProjection.Parse(context.Request, ReadShape.PawnFields);
+            if (ReadBatch.IsBatch(context.Request, id))
+            {
+                return ReadBatch.Reply(context, "pawns", requested => DescribeId(context, requested, fields));
+            }
+            object data = DescribeId(context, id, fields);
+            return data == null ? BridgeResponse.Error(404, "Pawn not found.") : ReadEnvelope.Ok(context, data);
+        }
+
+        private static object DescribeId(ReadContext context, string id, ReadProjection fields)
+        {
             Pawn pawn = FindPawn(context.Map, id);
             if (pawn == null)
             {
-                return BridgeResponse.Error(404, "Pawn not found.");
+                return null;
             }
 
-            // One pawn is read at normal detail unless asked otherwise: needs, mood, health, skills
-            // and traits, with the rest by include or detail=full.
+            // One pawn defaults to normal detail. An explicit projection can skip that work.
             ReadDetail detail = context.Request.Get("detail") == null ? ReadDetail.Normal : context.Request.Detail;
-            return ReadEnvelope.Ok(context, SerializePawn(pawn, RoleForPawn(context.Map, pawn), detail, context.Request));
+            return ReadProjection.Serialize(fields, pawn, () => SerializePawn(pawn, RoleForPawn(context.Map, pawn), detail, context.Request));
         }
 
         // Pawns under fog, such as insects or sleeping mechanoids in an unopened ancient shrine, are

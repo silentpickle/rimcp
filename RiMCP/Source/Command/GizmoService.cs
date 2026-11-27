@@ -5,6 +5,7 @@ using System.Runtime.Serialization;
 using RimWorld;
 using RiMCP.Bridge;
 using RiMCP.Read;
+using RiMCP.Shared;
 using RiMCP.Util;
 using UnityEngine;
 using Verse;
@@ -24,12 +25,29 @@ namespace RiMCP.Command
         public static BridgeResponse ListGizmos(BridgeRequest request, RouteMatch route)
         {
             ReadContext context = ReadContext.FromMap(request);
-            Thing thing = Owner(context.Map, route["thingId"]);
+            string id = route["thingId"];
+            ReadProjection fields = ReadProjection.Parse(context.Request, ReadShape.GizmoFields);
+            if (ReadBatch.IsBatch(context.Request, id))
+            {
+                return ReadBatch.Reply(context, "things", requested => DescribeId(context, requested, fields));
+            }
+            object data = DescribeId(context, id, fields);
+            return data == null ? BridgeResponse.Error(404, "No thing '" + id + "' on this map.") : ReadEnvelope.Ok(context, data);
+        }
+
+        private static object DescribeId(ReadContext context, string id, ReadProjection fields)
+        {
+            Thing thing = Targets.FindVisibleThing(context.Map, id);
+            return thing == null ? null : ReadProjection.Serialize(fields, thing, () => DescribeGizmos(thing, context.Request.Detail));
+        }
+
+        private static object DescribeGizmos(Thing thing, ReadDetail detail)
+        {
             List<GizmoEntry> gizmos = Build(thing);
-            return ReadEnvelope.Ok(context, Dto.Obj(
+            return Dto.Obj(
                 Dto.Field("thing", SummaryDto.Thing(thing)),
                 Dto.Field("revision", Revision(thing, gizmos)),
-                Dto.Field("gizmos", gizmos.Select(entry => Describe(thing, entry, context.Request.Detail != ReadDetail.Summary)).ToArray())));
+                Dto.Field("gizmos", gizmos.Select(entry => Describe(thing, entry, detail != ReadDetail.Summary)).ToArray()));
         }
 
         public static BridgeResponse SetBuildingToggle(BridgeRequest request, RouteMatch route)

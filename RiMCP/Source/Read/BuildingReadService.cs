@@ -3,36 +3,33 @@ using System.Collections.Generic;
 using System.Linq;
 using RimWorld;
 using RiMCP.Bridge;
+using RiMCP.Shared;
 using Verse;
 
 namespace RiMCP.Read
 {
     internal static class BuildingReadService
     {
+        private static readonly string[] FilterKeys = { "category", "def", "excludeDefs" };
+        private static readonly string[] FlatFilterKeys = { "category", "defNames", "excludeDefs" };
+
         public static BridgeResponse ListBuildings(BridgeRequest request, RouteMatch route)
         {
             ReadContext context = ReadContext.FromMap(request);
 
-            string category = context.Request.Get("category");
-            string normalizedCategory = string.IsNullOrWhiteSpace(category) ? null : category.ToLowerInvariant();
             ReadRequest query = context.Request;
-            var included = new HashSet<ThingDef>(query.DefList<ThingDef>("defNames"));
-            var excluded = new HashSet<ThingDef>(query.DefList<ThingDef>("excludeDefs"));
-            int? x = query.OptionalInt("x"), z = query.OptionalInt("z");
-            int? width = query.OptionalInt("width"), height = query.OptionalInt("height");
-            CellRect? rect = null;
-            if (x.HasValue || z.HasValue || width.HasValue || height.HasValue)
-            {
-                if (!x.HasValue || !z.HasValue || !width.HasValue || !height.HasValue ||
-                    x < 0 || z < 0 || x > 1000 || z > 1000 || width < 1 || height < 1 || width > 1001 || height > 1001)
-                    throw new BridgeException(400, "Supply x, z, width and height for the building rectangle.");
-                rect = new CellRect(x.Value, z.Value, width.Value, height.Value);
-            }
+            ReadRequest filter = query.Section("filter", FilterKeys, FlatFilterKeys);
+            string category = (filter ?? query).Get("category");
+            string normalizedCategory = string.IsNullOrWhiteSpace(category) ? null : category.ToLowerInvariant();
+            var included = filter == null ? new HashSet<ThingDef>(query.DefList<ThingDef>("defNames")) : filter.MatchDefs(true);
+            var excluded = new HashSet<ThingDef>((filter ?? query).DefList<ThingDef>("excludeDefs"));
+            ReadArea area = ReadArea.Parse(context, LegacyArea.Buildings);
+            ReadProjection fields = ReadProjection.Parse(query, ReadShape.BuildingFields);
             // Ordinal and numeric sort keys avoid culture-aware string comparison across every
             // colony building, walls and conduits included, on each page.
             IEnumerable<Building> source = context.Map.listerBuildings.allBuildingsColonist
                 .Where(building => (included.Count == 0 || included.Contains(building.def)) && !excluded.Contains(building.def))
-                .Where(building => !rect.HasValue || rect.Value.Contains(building.Position))
+                .Where(building => area.Contains(building.Position))
                 .Where(building => MatchesCategory(building, normalizedCategory))
                 .OrderBy(building => building.def.defName, StringComparer.Ordinal)
                 .ThenBy(building => building.thingIDNumber);
@@ -41,7 +38,7 @@ namespace RiMCP.Read
 
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("category", category),
-                Dto.Field("buildings", page.Items.Select(building => SerializeBuilding(building, context.Request.Detail, includeContents)).ToArray())),
+                Dto.Field("buildings", page.Items.Select(building => ReadProjection.Serialize(fields, building, () => SerializeBuilding(building, query.Detail, includeContents))).ToArray())),
                 page.Truncated,
                 page.NextCursor, "buildings");
         }
@@ -51,12 +48,27 @@ namespace RiMCP.Read
             ReadContext context = ReadContext.FromMap(request);
             string id = route["id"];
 
-            Building building = FindBuilding(context.Map, id);
+            ReadProjection fields = ReadProjection.Parse(context.Request, ReadShape.BuildingFields);
+            if (ReadBatch.IsBatch(context.Request, id))
+            {
+                return ReadBatch.Reply(context, "buildings", requested => DescribeId(context.Map, requested, fields));
+            }
+            object data = DescribeId(context.Map, id, fields);
+            return data == null ? BridgeResponse.Error(404, "Building not found.") : ReadEnvelope.Ok(context, data);
+        }
+
+        private static object DescribeId(Map map, string id, ReadProjection fields)
+        {
+            Building building = FindBuilding(map, id);
             if (building == null)
             {
-                return BridgeResponse.Error(404, "Building not found.");
+                return null;
             }
+            return ReadProjection.Serialize(fields, building, () => DescribeBuilding(building));
+        }
 
+        private static object DescribeBuilding(Building building)
+        {
             Dictionary<string, object> data = SerializeBuilding(building, ReadDetail.Full, true);
             CompAnimalPenMarker marker = building.TryGetComp<CompAnimalPenMarker>();
             if (marker != null && building.Spawned)
@@ -77,7 +89,7 @@ namespace RiMCP.Read
                         Dto.Field("count", info.TotalCount),
                         Dto.Field("nutritionPerDay", info.TotalNutritionConsumptionPerDay))).ToArray()));
             }
-            return ReadEnvelope.Ok(context, data);
+            return data;
         }
 
         public static Building FindBuilding(Map map, string id)

@@ -3,12 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using RimWorld;
 using RiMCP.Bridge;
+using RiMCP.Shared;
 using Verse;
 
 namespace RiMCP.Read
 {
     internal static class ThingReadService
     {
+        private static readonly string[] FilterKeys = { "def", "category", "excludeCategory", "query", "forbidden", "inStorage" };
+
         // Items on a map: anything that can be hauled, such as resources, food, weapons, apparel,
         // chunks, corpses, and minified buildings. Things under fog are never reported. Rows are
         // flat and short because a search can return many; each names its storage by id, and the
@@ -19,46 +22,42 @@ namespace RiMCP.Read
             ReadRequest query = context.Request;
             Map map = context.Map;
 
-            ThingDef def = query.OptionalDef<ThingDef>("def");
-            ThingCategoryDef category = query.OptionalDef<ThingCategoryDef>("category");
-            List<ThingCategoryDef> excluded = query.DefList<ThingCategoryDef>("excludeCategory");
-            string text = query.Get("query");
-            bool? forbidden = query.OptionalBool("forbidden");
-            bool? inStorage = query.OptionalBool("inStorage");
-            int? x = query.OptionalInt("x");
-            int? z = query.OptionalInt("z");
-            int? radius = query.OptionalInt("radius");
-            if (x.HasValue != z.HasValue || (radius.HasValue && !x.HasValue))
-            {
-                throw new BridgeException(400, "Give x and z together; radius needs them too.");
-            }
-            IntVec3? near = x.HasValue ? new IntVec3(x.Value, 0, z.Value) : (IntVec3?)null;
+            ReadRequest filter = query.Section("filter", FilterKeys, FilterKeys);
+            var defs = (filter ?? query).MatchDefs(filter != null);
+            ThingCategoryDef category = (filter ?? query).OptionalDef<ThingCategoryDef>("category");
+            List<ThingCategoryDef> excluded = (filter ?? query).DefList<ThingCategoryDef>("excludeCategory");
+            string text = (filter ?? query).Get("query");
+            bool? forbidden = (filter ?? query).OptionalBool("forbidden");
+            bool? inStorage = (filter ?? query).OptionalBool("inStorage");
+            ReadArea area = ReadArea.Parse(context, LegacyArea.Things);
+            IntVec3? near = area.Centre;
 
             List<Thing> matches = map.listerThings.ThingsInGroup(ThingRequestGroup.HaulableEver)
                 .Where(thing => thing.Spawned && !thing.Position.Fogged(map))
-                .Where(thing => def == null || thing.def == def)
+                .Where(thing => defs.Count == 0 || defs.Contains(thing.def))
                 .Where(thing => category == null || thing.def.IsWithinCategory(category))
                 .Where(thing => !excluded.Any(thing.def.IsWithinCategory))
                 .Where(thing => string.IsNullOrWhiteSpace(text) || thing.LabelNoCount.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0 || thing.def.defName.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0)
                 .Where(thing => !forbidden.HasValue || thing.IsForbidden(Faction.OfPlayer) == forbidden.Value)
                 .Where(thing => !inStorage.HasValue || thing.IsInValidStorage() == inStorage.Value)
-                .Where(thing => !radius.HasValue || thing.Position.DistanceTo(near.Value) <= radius.Value)
+                .Where(thing => area.Contains(thing.Position))
                 .ToList();
             IEnumerable<Thing> ordered = near.HasValue
                 ? matches.OrderBy(thing => thing.Position.DistanceToSquared(near.Value)).ThenBy(thing => thing.thingIDNumber)
                 : matches.OrderBy(thing => thing.def.defName, StringComparer.Ordinal).ThenBy(thing => thing.thingIDNumber);
+            ReadProjection fields = ReadProjection.Parse(query, ReadShape.ThingFields);
             Page<Thing> page = new Page<Thing>(ordered, query);
 
             Dictionary<string, object> storages = new Dictionary<string, object>();
             object[] rows = page.Items
-                .Select(thing => query.IdsOnly ? (object)ReadUtil.ThingId(thing) : SerializeThing(thing, map, near, query.Detail, storages))
+                .Select(thing => query.IdsOnly ? (object)ReadUtil.ThingId(thing) : ReadProjection.Serialize(fields, thing, () => SerializeThing(thing, map, near, query.Detail, storages)))
                 .ToArray();
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("summary", Dto.Obj(
                     Dto.Field("matches", matches.Count),
                     Dto.Field("totalStackCount", matches.Sum(thing => thing.stackCount)))),
                 Dto.Field("things", rows),
-                Dto.Field("storages", storages.Count == 0 ? null : storages)),
+                Dto.Field("storages", storages.Count == 0 || (fields != null && !fields.Includes("storage")) ? null : storages)),
                 page.Truncated,
                 page.NextCursor, "things");
         }
