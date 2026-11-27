@@ -8,6 +8,8 @@ RimMCP is a RimWorld mod that connects MCP-compatible clients to a live colony. 
 
 Supports RimWorld 1.6 and 1.7 unstable using the same mod DLL. The 1.7 engine's compatibility layer loads the assembly built against the 1.6 API; future unstable updates may require further testing.
 
+[Fork roadmap](docs/roadmap.md) · [Survey workflow and verification](docs/survey-workflow.md)
+
 Current MCP tools:
 
 | Area | Tools | Use these for |
