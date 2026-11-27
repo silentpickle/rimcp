@@ -1,6 +1,6 @@
 # Wave 2 workflow and verification
 
-Wave 2 connects whole-map observations to individual things and game-native controls. The run summary gives the planned turn digest a bounded record of what changed. The additional stop conditions let a caller wait for particular work while the game runs. [Detailed roadmap](roadmap-detail.md)
+Wave 2 connects whole-map observations to individual things and game-native controls. The run summary gives the Wave 3 turn digest a bounded record of what changed. The additional stop conditions let a caller wait for particular work while the game runs. [Detailed roadmap](roadmap-detail.md)
 
 ## Wait for work and read what changed
 
@@ -67,6 +67,6 @@ Run `list_scenarios`, then `preview_scenario` with the exact name and, when need
 
 The November 27 trial used disposable RimWorld 1.6.4871 saves with the rebuilt bridge and proxy. A scoped stool blueprint stopped the advance after it became a building. The summary retained its completion and the new letter. An idle stop beyond the event limit and preview access during a held operation were exercised in the compatibility harness.
 
-Live calls also verified exact cells and fog masking, a cooler's info-card explanation, a two-click Fahrenheit stepper, repeated actions, the food unforbid hint, and close-range melee selection with a native minimum-range weapon. The four previews left the agent log unchanged. The research dialog adopted and answered successfully both with and without the explicit research stop. After each answer the next advance moved the clock. A live caravan arrival remains to be checked.
+Live calls also verified exact cells and fog masking, a cooler's info-card explanation, a two-click Fahrenheit stepper, repeated actions, the food unforbid hint, and close-range melee selection with a native minimum-range weapon. The four previews left the agent log unchanged. The research dialog adopted and answered successfully both with and without the explicit research stop. After each answer the next advance moved the clock. Wave 4 subsequently verified live caravan arrival and return. [Campaign evidence](wave-4-campaign.md#recorded-live-verification)
 
 The copied Benevolina save verified role-change blockers, an exact retry, active ceremony readback, and the leader role taking effect after the ceremony. The new leader then started a speech with a selected cast, and an overlapping start was blocked. Main-menu scenario previews reported three of eight candidates and declared supplies for Crashlanded, and one pawn with an empty supply list for Naked Brutality. With the colony loaded, the same Crashlanded preview left the clock unchanged.

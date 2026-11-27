@@ -1,6 +1,6 @@
 # Survey workflow and verification
 
-Use the survey to decide **where to look**, named tiles to inspect the local map, and filtered lists or ID reads to get details for a decision. This is the observation path that the planned turn digest will reuse. The watcher table supplies the separate record of what changed during an advance. [Fork roadmap](roadmap.md)
+Use the survey to decide **where to look**, named tiles to inspect the local map, and filtered lists or ID reads to get details for a decision. The Wave 3 turn digest reuses the mover data and the watcher table's record of what changed during an advance. [Fork roadmap](roadmap.md)
 
 ## Try the workflow
 

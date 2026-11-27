@@ -24,11 +24,14 @@ const ACCESS_POLL_SECONDS: u64 = 5;
 // Newest first: a client asking for one of these gets it, any other the newest.
 const PROTOCOL_VERSIONS: [&str; 4] = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const INSTRUCTIONS: &str = "RimMCP plays a running RimWorld game. Start with get_game_context: it says whether the game is at the main menu, in new-game setup, or playing, and which map is shown. Then get_colony_status lists what needs attention. Reads default to a short summary; ask for more with detail or include only when needed. Give each change a requestId, so a retry is safe. Read a reply's dialogs: a question the game asks waits for answer_dialog, or for the player. Use tell_player to tell the player what you are doing.";
+const SCOPED_INSTRUCTIONS: &str = "Use the RimMCP tools advertised for this role. Reads default to a short summary. Forward decisions outside your role to the main agent.";
 
 type ProxyError = Box<dyn Error>;
 
 struct Proxy {
     manifest: Manifest,
+    allowed_tools: Option<HashSet<String>>,
+    role: Option<String>,
     base_url: String,
     authorization: Option<HeaderValue>,
     agent: ureq::Agent,
@@ -220,8 +223,20 @@ impl Proxy {
             .ok()
             .and_then(|value| value.trim().parse::<u64>().ok())
             .unwrap_or(ACCESS_POLL_SECONDS);
+        let manifest = Manifest::load()?;
+        let groups = optional_env("RIMCP_TOOL_GROUPS")?;
+        let names = optional_env("RIMCP_TOOLS")?;
+        let allowed_tools = manifest.allowed_tools(groups.as_deref(), names.as_deref())?;
+        let role = optional_env("RIMCP_ROLE")?;
+        if role.as_deref().is_some_and(|role| !valid_role(role)) {
+            return Err(
+                "RIMCP_ROLE must be 1–32 ASCII letters, digits, underscores, or hyphens.".into(),
+            );
+        }
         Ok(Self {
-            manifest: Manifest::load()?,
+            manifest,
+            allowed_tools,
+            role,
             base_url,
             authorization,
             agent: ureq::Agent::config_builder()
@@ -281,19 +296,26 @@ impl Proxy {
         ))
     }
 
-    /// The tools the agent may use: those that are on, or all of them when RimMCP cannot be
-    /// reached (calls then report that it is not running).
+    fn in_scope(&self, tool: &Tool) -> bool {
+        self.allowed_tools
+            .as_ref()
+            .is_none_or(|allowed| allowed.contains(&tool.name))
+    }
+
+    /// If the game is unreachable, list the local scope and let calls report connection errors.
     fn list_tools(&self) -> Value {
         let access = self.fetch_access();
-        let tools: Vec<&Tool> = match &access {
-            Some((_, on)) => self
-                .manifest
-                .tools
-                .iter()
-                .filter(|tool| on.contains(&tool.name))
-                .collect(),
-            None => self.manifest.tools.iter().collect(),
-        };
+        let tools: Vec<&Tool> = self
+            .manifest
+            .tools
+            .iter()
+            .filter(|tool| self.in_scope(tool))
+            .filter(|tool| {
+                access
+                    .as_ref()
+                    .is_none_or(|(_, on)| on.contains(&tool.name))
+            })
+            .collect();
         if let Ok(mut listed) = self.listed.lock() {
             *listed = Some(access.map(|(version, _)| version));
         }
@@ -431,7 +453,7 @@ impl Proxy {
                     json!({
                         "protocolVersion": version, "capabilities": {"tools": {"listChanged": true}},
                         "serverInfo": {"name": "rimcp", "version": self.manifest.version},
-                        "instructions": INSTRUCTIONS
+                        "instructions": if self.allowed_tools.is_some() { SCOPED_INSTRUCTIONS } else { INSTRUCTIONS }
                     }),
                 ))
             }
@@ -459,6 +481,12 @@ impl Proxy {
         let Some(tool) = self.manifest.tools.iter().find(|tool| tool.name == name) else {
             return failure(id, -32602, &format!("Unknown tool: {name}"));
         };
+        if !self.in_scope(tool) {
+            return result(
+                id,
+                tool_error("This tool is outside this proxy's configured scope."),
+            );
+        }
         let args = params.get("arguments").unwrap_or(&Value::Null);
         let max_bytes = match reply_budget::requested(tool, args) {
             Ok(bytes) => bytes,
@@ -492,6 +520,9 @@ impl Proxy {
         }
         if let Some(client) = self.client.lock().ok().and_then(|client| client.clone()) {
             request = request.header("X-RimMCP-Client", client);
+        }
+        if let Some(role) = &self.role {
+            request = request.header("X-RimMCP-Role", role.as_str());
         }
         request = request.header("X-RimMCP-Session", self.session.as_str());
         let received = (|| -> Result<(bool, Option<String>), ProxyError> {
@@ -543,13 +574,13 @@ impl Proxy {
     ) -> Value {
         let mut structured: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
         let wire_bytes = text.len() as u64;
-        let rate = success
+        let sample = success
             .then(|| self.record_reply(&structured, wire_bytes))
             .flatten();
         if wire_bytes > max_bytes {
             return reply_budget::omitted(read_only, success, max_bytes, "reply", &structured);
         }
-        if success && play_metrics::annotate(&mut structured, name, rate) {
+        if success && play_metrics::annotate(&mut structured, name, sample, self.role.as_deref()) {
             text = structured.to_string();
         }
         let mut content =
@@ -573,9 +604,25 @@ impl Proxy {
         value
     }
 
-    fn record_reply(&self, structured: &Value, bytes: u64) -> Option<u64> {
+    fn record_reply(&self, structured: &Value, bytes: u64) -> Option<play_metrics::Sample> {
         self.play_metrics.lock().ok()?.record(structured, bytes)
     }
+}
+
+fn optional_env(name: &str) -> Result<Option<String>, ProxyError> {
+    match env::var(name) {
+        Ok(value) => Ok(Some(value)),
+        Err(env::VarError::NotPresent) => Ok(None),
+        Err(_) => Err(format!("{name} must be valid UTF-8.").into()),
+    }
+}
+
+fn valid_role(role: &str) -> bool {
+    !role.is_empty()
+        && role.len() <= 32
+        && role
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
 }
 
 /// Visible ASCII only, so it is always a valid header value.
@@ -771,6 +818,8 @@ mod tests {
                 version: "test".into(),
                 tools: Vec::new(),
             },
+            allowed_tools: None,
+            role: None,
             // An invalid URL makes accidental bridge access fail without opening a socket.
             base_url: String::new(),
             authorization: None,
@@ -861,6 +910,7 @@ mod tests {
                         for (name, label) in [
                             ("x-rimmcp-client:", "client"),
                             ("x-rimmcp-session:", "session"),
+                            ("x-rimmcp-role:", "role"),
                         ] {
                             if lower.starts_with(name) {
                                 caller
@@ -909,9 +959,76 @@ mod tests {
         (test_proxy(base_url), received)
     }
 
+    #[test]
+    fn role_scope_persists_offline_and_cannot_be_bypassed_by_call() {
+        let access = Arc::new(Mutex::new(Some(
+            r#"{"instance":"game","revision":1,"tools":["fast","cancel"]}"#.to_string(),
+        )));
+        let (url, received) = fake_bridge_with_access(access.clone());
+        let mut proxy = test_proxy(url);
+        let setup = Arc::get_mut(&mut proxy).unwrap();
+        setup.allowed_tools = setup
+            .manifest
+            .allowed_tools(None, Some("fast, slow"))
+            .unwrap();
+        setup.role = Some("scribe".into());
+        proxy.handle(br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"codex"}}}"#);
+
+        let names = |listing: Value| {
+            listing["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|tool| tool["name"].as_str().unwrap().to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(names(proxy.list_tools()), vec!["fast"]);
+        let before = received.lock().unwrap().len();
+        let denied = proxy
+            .handle(br#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"cancel"}}"#)
+            .unwrap();
+        assert_eq!(denied["result"]["isError"], true);
+        assert_eq!(received.lock().unwrap().len(), before);
+
+        let allowed = proxy
+            .handle(br#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"fast"}}"#)
+            .unwrap();
+        assert_eq!(allowed["result"]["isError"], false);
+        assert!(received
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .contains("client=codex role=scribe session=test"));
+        *access.lock().unwrap() = None;
+        assert_eq!(names(proxy.list_tools()), vec!["slow", "fast"]);
+    }
+
+    #[test]
+    fn scope_settings_validate_groups_and_exact_names() {
+        let manifest = Manifest::load().unwrap();
+        assert!(manifest.allowed_tools(None, None).unwrap().is_none());
+        let allowed = manifest
+            .allowed_tools(Some("observe"), Some("get_game_log"))
+            .unwrap()
+            .unwrap();
+        assert!(allowed.contains("get_turn_digest"));
+        assert!(allowed.contains("get_game_log"));
+        assert!(!allowed.contains("export_reference"));
+        assert!(!allowed.contains("advance_time"));
+        assert!(manifest.allowed_tools(Some("typo"), None).is_err());
+        assert!(manifest
+            .allowed_tools(None, Some("get_game_context,"))
+            .is_err());
+        assert!(manifest.allowed_tools(None, Some("")).is_err());
+        assert!(valid_role("land_advisor-1"));
+        assert!(!valid_role("scribe\n"));
+    }
+
     fn test_proxy(base_url: String) -> Arc<Proxy> {
         let tool = |name: &str| Tool {
             name: name.into(),
+            group: "observe".into(),
             description: String::new(),
             input_schema: Map::new(),
             annotations: Map::new(),
@@ -928,11 +1045,14 @@ mod tests {
                     tool("fast"),
                     tool("speed"),
                     Tool {
+                        group: "time".into(),
                         method: manifest::Method::Post,
                         ..tool("cancel")
                     },
                 ],
             },
+            allowed_tools: None,
+            role: None,
             base_url,
             authorization: None,
             agent: ureq::Agent::config_builder()

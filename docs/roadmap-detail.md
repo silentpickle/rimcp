@@ -19,7 +19,39 @@ Record each package's status, commit and date here. Keep the verification eviden
 - **W2.14**, **W2.15**, and **W3.1** landed November 27 in `dbe0621`. They add native Ideology rituals, setup scenario previews, a turn digest, and revisioned survey and list reads. [Wave 2 workflow and checks](wave-2-workflow.md)
 - **W3.2–W3.12** landed in `a89f235`. They add watcher-driven time, stock effects capture, construction planning, derived layers, structure templates, a [source cache and RimSage workflow](source-research.md), thing notes, exports, suggested work priorities, and cooler and hunger checks. [Wave 3 workflow](wave-3-workflow.md)
 - **Wave 4** landed in `a89f235`. It adds native caravan drafts and packing, food and spoilage estimates, departure and travel stops, and encounter reform. The Nov. 27 disposable round trip reached Swampston and returned to the loaded home map. [Campaign workflow](wave-4-campaign.md)
-- **Wave 5** has a role and verification plan. The scribe workflow can be used by the main agent with existing reads. Per-role enforcement, attribution, and multi-agent acceptance are planned.
+- **W5.1**, **W5.2**, and the **W5.4** scribe workflow are implemented locally. The Nov. 27 disposable trial exercised role scoping, action attribution, a steward retry, incremental events, a diagnostic read, and a verified save and reload. **W5.3** has client setup and role prompts. The live transport trial used scripted MCP clients, with model-driven coordination still to try. [Wave 5 evidence and reproduction](wave-5-roles.md)
+
+At the November 27 checkpoint, `8b0f71c` includes the source-research guide and Wave 5 plan. The Wave 5 implementation and verification docs are local changes. The tested DLL and proxy ran on RimWorld **1.6.4871 rev597**. The latest recorded suite passed **24 proxy tests** and **97 compatibility checks**, with three expected Unity-native failures under standalone Mono. [Wave 5 verification](wave-5-roles.md#november-27-verification)
+
+## Remaining work
+
+### Close Wave 5
+
+1. Run the main, steward, and scribe prompts on one disposable save in Codex, then repeat with Claude Code. Confirm each session has only its assigned RimMCP connection. Have the steward make one approved work change, then hand the receipt to the main agent. The main agent advances and verifies a save. [Client setup](wave-5-roles.md#connect-a-client)
+2. Hand the scribe the actual digest, operation receipt, and prior history cursor. Check the written diary and resumable handoff against the observed load, map, tick, game event, diagnostic excerpt, and verified save. Repeat the checkpoint and reload. Verify that an incomplete-history reply produces an explicit coverage note. The scripted run covered a repeated event and load reset. Live history loss remains open. [Scribe inputs and verification](#wave-5--main-agent-and-maintenance-agents)
+3. Record the added calls and reply bytes from the scribe's role metrics, including which inputs it reused from the main agent. Record the client and the fixture in the trial handoff. [Role metrics](wave-5-roles.md#verify-a-role)
+
+### Verify existing capabilities in more play conditions
+
+| Area | Evidence so far | Remaining check |
+| --- | --- | --- |
+| Native raid and movers | Trader grouping and a synthetic hostile group exercised the survey. | Observe a native raid's group and stage changes and compare them with the map and watcher stop. [Survey evidence](survey-workflow.md) |
+| Hostile expedition | A friendly round trip completed. A separate controlled encounter verified native arrival, refusal with defenders active, and reform and return after clearance. | Play a complete hostile expedition and verify its actual settlement outcome, surviving roster, cargo, and home recovery. [Campaign evidence](wave-4-campaign.md#recorded-live-verification) |
+| Medical and construction | Medical reads and a standing-pawn rescue refusal were exercised. A natural-wall smoothing order was accepted and work began. | Verify a successful rescue and its bed, active blood loss, an infection with rising immunity, and completion of natural-wall smoothing. |
+| Runtime compatibility | The recent wave trials used 1.6.4871 rev597. | Run the current mod and proxy on a 1.7 disposable save. Check startup, context, turn digest, a command, caravan flow, and scoped discovery. The three Unity-native checks excluded by the standalone Mono harness need Unity for direct verification. |
+| Source provenance | RimSage's rebuilt rev595 index returned plant and caravan methods and shipped Def XML. | Rebuild against rev597 when researching the disposable fixtures. Compare game version and assembly hash, then pair any inference with a live check. [RimSage workflow](source-research.md#use-rimsage-with-rimmcp) |
+
+### Follow-up capabilities from playtests
+
+| Area | Remaining scope |
+| --- | --- |
+| Campaign and expansion | Native trading and encounter decisions beyond the supported generic dialog path. A compact Anomaly read for discovered monolith state, unlocks, study, and containment. |
+| Colony decisions | Food production and harvest attribution alongside the stock movement trend. Validate the need for a native early-harvest order after using exact plant IDs and game-checked designations. Survey group IDs as selectors and proximity-based watches are design ideas to revisit after the native raid trial. |
+| Batch reads and templates | Batch `list_gizmos` remains from E6. `get_pawn` and `get_building` already batch by ID, and `set_building_toggles` batches repeated toggles. Extend P4's tested bedroom, freezer and pen set with the original barracks, hospital, and kitchen plans as needed. |
+| Reference coverage | `export_reference` provides building data, research prerequisites and facilities, and scenario/storyteller/difficulty data. P2 research unlocks and P3 trait degrees, work types, and xenotypes remain export extensions. Trait validation guidance can use the same catalog. |
+| Optional integrations | An in-game Workshop Rimdex lookup bridge. The existing offline Rimdex Reference and versioned RimSage sources cover separate research tasks. |
+
+Choose a follow-up capability after the live trial identifies the decision it would improve. Keep the original package estimates and playtest requests as historical context.
 
 ## Critical path
 
@@ -166,12 +198,12 @@ One main agent handles time and decisions. Maintenance agents keep the colony op
 
 | Pkg | Item | Grade | Risk | Depends | Main files |
 | --- | --- | --- | --- | --- | --- |
-| W5.1 | **Per-role tool access.** Export group membership in the proxy manifest. Configure a local allowlist by group or exact tool name. Apply it in both `tools/list` and `tools/call`; keep the mod's global access as the outer limit. Preserve unconfigured clients' behavior and reject invalid configured scopes at startup. | 2 | L | – | Shared manifest, manifest exporter, proxy |
+| W5.1 | **Per-role tool access.** Read group membership from the shared manifest. Configure a local allowlist by group or exact tool name. Apply it in both `tools/list` and `tools/call`; keep the mod's global access as the outer limit. Preserve unconfigured clients' behavior and reject invalid configured scopes at startup. | 2 | L | – | Proxy `manifest.rs` and `main.rs` |
 | W5.2 | **Role attribution.** Carry a configured role label alongside client and session through the proxy to the game log of agent actions. Report calls and reply bytes by role. Preserve request deduplication and operation receipts. | 2 | L | W0.1 | Proxy, `AgentLog.cs`, `AgentClients.cs`, play metrics |
 | W5.3 | **Client setup and live trial.** Provide Codex and Claude Code role definitions with tool scopes, handoff inputs, and model guidance. Verify the main agent, scribe, and one narrow maintenance role on a disposable save. | 3 | M | W3.2, W5.1, W5.2, W5.4 | Usage guide and agent definitions |
 | W5.4 | **Scribe checkpoints.** Start with existing observation tools and main-agent receipts. Validate incremental history, save verification, load changes, and a focused diagnostic log excerpt. | 2 | L | W2.2, W3.1 | Scribe workflow in the colony workspace, disposable-save evidence |
 
-Start W5.4 with a main-agent handoff while W5.1 and W5.2 are built. Use the results to set the scribe's tool scope and checkpoint budget for the W5.3 live trial.
+The disposable trial validated the W5.4 tool scope. Use the main agent's existing summaries and receipts first in the W5.3 model-driven trial, then measure the additional checkpoint reads.
 
 **Scribe inputs.** Use `get_turn_digest` as the short status read when the main agent has no digest to pass along. Expand risks and food with `get_colony_status` and inspect a particular run with `get_advance`. Use `get_events` for player-visible letters, messages, and history, with its own `since` cursor. Use `get_game_log` for a bounded warning or error excerpt when investigating a problem. Its offset is for paging retained diagnostic entries. Use command and operation receipts from the main agent for actor, outcome, and save evidence.
 

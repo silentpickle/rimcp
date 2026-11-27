@@ -16,17 +16,28 @@ namespace RiMCP.Bridge
             { "opencode", "OpenCode" }
         };
 
-        public static string Describe(string name, string session)
+        public static string Describe(string name, string session, string role = null)
         {
             string client = Clean(name, 40);
             string id = Clean(session, 8);
-            if (client == null && id == null)
+            string roleLabel = ValidRole(role) ? role : null;
+            if (client == null && id == null && roleLabel == null)
             {
                 return null;
             }
             string known;
             string label = client == null ? "Agent" : Known.TryGetValue(client, out known) ? known : client;
+            if (roleLabel != null)
+            {
+                label = roleLabel + " (" + label + ")";
+            }
             return id == null ? label : label + " " + id;
+        }
+
+        private static bool ValidRole(string role)
+        {
+            return !string.IsNullOrEmpty(role) && role.Length <= 32 &&
+                role.All(c => c < 128 && (char.IsLetterOrDigit(c) || c == '-' || c == '_'));
         }
 
         private static string Clean(string text, int max)

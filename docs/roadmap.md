@@ -2,7 +2,7 @@
 
 The goal is a repeatable play loop in which an MCP client reads a compact account of what changed, sends a batch of orders, and lets RimWorld run until a meaningful condition stops it. The bridge should use the game's own checks, respect fog and access settings, and give callers a way to recover omitted detail.
 
-The [detailed fork roadmap](roadmap-detail.md) tracks package order, dependencies, and verification. The companion colony workspace keeps the playtest backlog, design notes, and save-specific handoffs.
+The [detailed fork roadmap](roadmap-detail.md) tracks package order, dependencies, verification, and [remaining work](roadmap-detail.md#remaining-work). The companion colony workspace keeps the playtest backlog, design notes, and save-specific handoffs.
 
 ## Landed through November 27, 2026
 
@@ -20,7 +20,15 @@ Wave 3 adds watcher-driven turns and a compact digest, optional native effect ov
 
 Wave 4 adds native caravan draft, packing, travel and reform workflows. A disposable Benevolina caravan reached Swampston and returned to its loaded home map. [Wave 4 campaign workflow](wave-4-campaign.md)
 
+Wave 5 adds role-scoped proxy connections, action attribution, and per-role reply measurements. A live disposable trial exercised main, steward, and scribe MCP connections through a checkpoint and reload. The role prompts are ready for a model-driven play session. [Wave 5 configuration and verification](wave-5-roles.md)
+
 The survey disposable-save checks measured a **3,453-byte** overview with movers and notable things. A 17-member trade party appeared as one group, and a surveyed component vein opened through `get_building`. The hostile fields were exercised with a synthetic hostile trader checkpoint. A live raid stage still needs verification. [Survey workflow and checks](survey-workflow.md)
+
+## What's left
+
+1. **Finish Wave 5 acceptance.** Run the documented roles in Codex and Claude Code on a disposable save. Check the actual written scribe handoff, replay and reload behavior, history-gap reporting, and checkpoint cost. [Acceptance checklist](roadmap-detail.md#remaining-work)
+2. **Extend live verification.** Exercise a native raid, a complete hostile expedition, and positive medical cases. The Wave 4 hostile fixture established arrival and reform after controlled clearance. Verify recent changes on RimWorld 1.7 separately. [Wave 4 evidence](wave-4-campaign.md#recorded-live-verification)
+3. **Prioritize the next capabilities from play.** Existing candidates include native trading, Anomaly progression, more complete reference exports, and smaller follow-ups from colony playtests. [Follow-up inventory](roadmap-detail.md#remaining-work)
 
 ## Build-out direction
 

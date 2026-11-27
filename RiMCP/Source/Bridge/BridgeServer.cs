@@ -191,7 +191,8 @@ namespace RiMCP.Bridge
                 else
                 {
                     response = dispatch(new BridgeRequest(context.Request.HttpMethod, context.Request.Url, ReadBody(context.Request),
-                        AgentClients.Describe(context.Request.Headers["X-RimMCP-Client"], context.Request.Headers["X-RimMCP-Session"])));
+                        AgentClients.Describe(context.Request.Headers["X-RimMCP-Client"], context.Request.Headers["X-RimMCP-Session"],
+                            context.Request.Headers["X-RimMCP-Role"])));
                 }
             }
             catch (RequestBodyTooLargeException ex)

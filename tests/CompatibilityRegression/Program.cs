@@ -1406,7 +1406,10 @@ internal static partial class Program
             }
             Check(LogEntries().Count == (int)AgentLogType().GetField("MaxEntries").GetValue(null), "the log keeps only its newest entries");
 
-            Check((string)Invoke("RiMCP.Bridge.AgentClients", "Describe", "codex-mcp-client", "3f2a") == "Codex 3f2a" && (string)Invoke("RiMCP.Bridge.AgentClients", "Describe", "my\nclient", null) == "myclient", "clients are named plainly");
+            Check((string)Invoke("RiMCP.Bridge.AgentClients", "Describe", "codex-mcp-client", "3f2a", null) == "Codex 3f2a"
+                && (string)Invoke("RiMCP.Bridge.AgentClients", "Describe", "my\nclient", null, "bad\nrole") == "myclient"
+                && (string)Invoke("RiMCP.Bridge.AgentClients", "Describe", "codex", "3f2a", "steward") == "steward (Codex) 3f2a",
+                "clients retain their name and session alongside a valid role");
         }
         finally
         {

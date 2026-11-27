@@ -14,9 +14,9 @@ This fork builds on rakanssh's RimMCP, which provides the in-game bridge, native
 
 I want an agent to play a RimWorld colony across many sessions and eventually manage expeditions from departure through return. That means seeing the whole map, finding the detail that matters, and knowing when to let the game run. The fork already adds a whole-map survey with named tiles, visible mover groups and landmarks, plus bounded replies and more ways to read or act in batches.
 
-Advance runs can keep the game moving between turns and stop for events, such as a blueprint finishing or a caravan arriving. The fork adds construction planning, live reference exports, and caravan workflows from packing through return. The next roadmap phase gives the main agent and maintenance agents separate roles.
+Advance runs can keep the game moving between turns and stop for events, such as a blueprint finishing or a caravan arriving. The fork adds construction planning, live reference exports, and caravan workflows from packing through return. Each role can now use a separate proxy connection with its own tool scope and activity label.
 
-[Roadmap overview](docs/roadmap.md) · [Detailed fork roadmap](docs/roadmap-detail.md) · [Survey workflow](docs/survey-workflow.md) · [Wave 2 workflow and verification](docs/wave-2-workflow.md) · [Wave 3 turns and planning](docs/wave-3-workflow.md) · [Wave 4 caravan workflow](docs/wave-4-campaign.md) · [RimSage setup](docs/source-research.md#use-rimsage-with-rimmcp) · [Build this fork](#building-from-source)
+[Roadmap overview](docs/roadmap.md) · [Detailed fork roadmap](docs/roadmap-detail.md) · [Survey workflow](docs/survey-workflow.md) · [Wave 2 workflow and verification](docs/wave-2-workflow.md) · [Wave 3 turns and planning](docs/wave-3-workflow.md) · [Wave 4 caravan workflow](docs/wave-4-campaign.md) · [Wave 5 role connections](docs/wave-5-roles.md) · [RimSage setup](docs/source-research.md#use-rimsage-with-rimmcp) · [Build this fork](#building-from-source)
 
 ## Current MCP tools
 
