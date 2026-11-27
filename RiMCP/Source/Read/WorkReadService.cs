@@ -15,8 +15,10 @@ namespace RiMCP.Read
                 .OrderBy(role => role.Pawn.LabelShortCap);
             Page<PawnReadService.PawnRole> page = new Page<PawnReadService.PawnRole>(pawns, context.Request);
 
+            object suggestions = context.Request.Wants("suggestions") ? Suggestions(context.Map) : null;
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("manualPriorities", Find.PlaySettings == null ? false : Find.PlaySettings.useWorkPriorities),
+                Dto.Field("suggestedEntries", suggestions),
                 Dto.Field("workTypes", DefDatabase<WorkTypeDef>.AllDefsListForReading
                     .OrderBy(def => def.naturalPriority)
                     .Select(def => Dto.Obj(
@@ -28,6 +30,27 @@ namespace RiMCP.Read
                 page.Truncated,
                 page.NextCursor, "pawns", revisionScope: "work", rowIds: page.Items.Select(role => ReadUtil.ThingId(role.Pawn)));
         }
+
+        private static object Suggestions(Map map)
+        {
+            Pawn[] workers = map.mapPawns.FreeColonistsSpawned.Where(pawn =>
+                !pawn.Downed && !pawn.Drafted && !pawn.InMentalState && pawn.skills != null && pawn.workSettings?.EverWork == true).ToArray();
+            return DefDatabase<WorkTypeDef>.AllDefsListForReading
+                .Where(work => work.relevantSkills.Count > 0 && !workers.Any(pawn =>
+                    !pawn.WorkTypeIsDisabled(work) && IsPriorityCoverage(pawn.workSettings.GetPriority(work))))
+                .OrderByDescending(work => work.naturalPriority).ThenBy(work => work.defName)
+                .Select(work => workers.Where(pawn => !pawn.WorkTypeIsDisabled(work))
+                    .OrderByDescending(pawn => work.relevantSkills.Average(skill => pawn.skills.GetSkill(skill).Level))
+                    .ThenByDescending(pawn => work.relevantSkills.Sum(skill => (int)pawn.skills.GetSkill(skill).passion))
+                    .ThenBy(pawn => pawn.thingIDNumber)
+                    .Take(1)
+                    .Select(pawn => Dto.Obj(Dto.Field("pawnId", ReadUtil.ThingId(pawn)),
+                        Dto.Field("workType", work.defName), Dto.Field("priority", 2)))
+                    .FirstOrDefault())
+                .Where(entry => entry != null).Take(100).ToArray();
+        }
+
+        private static bool IsPriorityCoverage(int priority) => priority > 0 && priority <= 2;
 
         private static object SerializeWorkPawn(Pawn pawn, string role, ReadRequest request)
         {

@@ -20,7 +20,14 @@ namespace RiMCP.Read
                 .Where(caravan => caravan.IsPlayerControlled).OrderBy(caravan => caravan.ID);
             Page<Caravan> page = new Page<Caravan>(caravans, context.Request);
             return ReadEnvelope.Ok(context, Dto.Obj(Dto.Field("caravans",
-                page.Items.Select(caravan => Serialize(caravan, context.Request.Wants("inventory"))).ToArray())),
+                page.Items.Select(caravan => Serialize(caravan, context.Request.Wants("inventory"))).ToArray()),
+                Dto.Field("forming", Formations().Take(20).Select(lord =>
+                {
+                    var job = (LordJob_FormAndSendCaravan)lord.LordJob;
+                    return Dto.Obj(Dto.Field("id", lord.loadID), Dto.Field("mapId", lord.Map.uniqueID.ToString()),
+                        Dto.Field("status", job.Status), Dto.Field("paused", lord.CurLordToil is LordToil_PrepareCaravan_Pause),
+                        Dto.Field("pawnIds", lord.ownedPawns.Concat(job.downedPawns).Select(ReadUtil.ThingId).ToArray()));
+                }).ToArray())),
                 page.Truncated, page.NextCursor, "caravans");
         }
 
@@ -31,9 +38,9 @@ namespace RiMCP.Read
             WorldObject target = RequireTarget(context.Request.OptionalInt("targetId"));
             string action = context.Request.Get("action");
             Arrival(caravan, target, action, out string reason);
-            int? ticks = reason == null ? EstimateTicks(caravan, target.Tile) : null;
-            reason = reason ?? (ticks.HasValue ? null : "No caravan route to that world object.");
-            return ReadEnvelope.Ok(context, RouteResult(caravan, target, action, ticks, reason));
+            RouteEstimate outcome = reason == null ? EstimateRoute(caravan, target.Tile) : null;
+            reason = reason ?? (outcome != null ? null : "No caravan route to that world object.");
+            return ReadEnvelope.Ok(context, RouteResult(caravan, target, action, outcome, reason));
         }
 
         public static BridgeResponse SetRoute(BridgeRequest request, RouteMatch route)
@@ -53,12 +60,12 @@ namespace RiMCP.Read
             Caravan caravan = RequireCaravan(caravanId);
             WorldObject target = RequireTarget(body.TargetId);
             CaravanArrivalAction arrival = Arrival(caravan, target, body.Action, out string reason);
-            int? ticks = reason == null ? EstimateTicks(caravan, target.Tile) : null;
-            if (!ticks.HasValue)
+            RouteEstimate outcome = reason == null ? EstimateRoute(caravan, target.Tile) : null;
+            if (outcome == null)
             {
                 throw new CommandException(409, reason ?? "No caravan route to that world object.");
             }
-            var result = RouteResult(caravan, target, body.Action, ticks, null);
+            var result = RouteResult(caravan, target, body.Action, outcome, null);
             string log = "Ordered " + caravan.LabelCap + " to " + arrival.Label;
             if (!caravan.pather.StartPath(target.Tile, arrival, repathImmediately: true))
             {
@@ -123,7 +130,44 @@ namespace RiMCP.Read
             return arrival;
         }
 
-        private static int? EstimateTicks(Caravan caravan, PlanetTile tile)
+        internal static IEnumerable<Verse.AI.Group.Lord> Formations()
+        {
+            return Find.Maps == null ? Enumerable.Empty<Verse.AI.Group.Lord>() :
+                Find.Maps.SelectMany(map => map.lordManager.lords).Where(lord => lord.LordJob is LordJob_FormAndSendCaravan);
+        }
+
+        internal static int Hungry(Caravan caravan)
+        {
+            return caravan.PawnsListForReading.Count(pawn => pawn.needs?.food?.CurCategory >= HungerCategory.UrgentlyHungry);
+        }
+
+        internal static string Immobilized(Caravan caravan)
+        {
+            if (caravan.ImmobilizedByMass) return "overweight";
+            if (caravan.AllOwnersDowned) return "allOwnersDowned";
+            if (caravan.AllOwnersHaveMentalBreak) return "allOwnersInMentalBreak";
+            return null;
+        }
+
+        internal static object FoodEstimate(float days, float rot, int? ticks)
+        {
+            double? travelDays = ticks / (double)GenDate.TicksPerDay;
+            bool foodCapped = days >= DaysWorthOfFoodCalculator.InfiniteDaysWorthOfFood;
+            bool rotCapped = rot >= DaysUntilRotCalculator.InfiniteDaysUntilRot;
+            return Dto.Obj(Dto.Field("estimatedFoodDays", days), Dto.Field("foodEstimateCapped", foodCapped),
+                Dto.Field("estimatedDaysUntilMostFoodRots", rotCapped ? (float?)null : rot),
+                Dto.Field("travelDays", travelDays),
+                Dto.Field("foodMayRunOut", travelDays.HasValue && !foodCapped ? (bool?)(days < travelDays) : null),
+                Dto.Field("mostFoodMayRotBeforeArrival", travelDays.HasValue && !rotCapped ? (bool?)(rot < travelDays) : null));
+        }
+
+        private sealed class RouteEstimate
+        {
+            public int Ticks;
+            public object Food;
+        }
+
+        private static RouteEstimate EstimateRoute(Caravan caravan, PlanetTile tile)
         {
             if (!caravan.Tile.Valid || !tile.Valid || !caravan.Tile.LayerDef.SurfaceTiles
                 || caravan.Tile.Layer != tile.Layer || !caravan.CanReach(tile))
@@ -132,16 +176,32 @@ namespace RiMCP.Read
             }
             if (caravan.Tile == tile)
             {
-                return 0;
+                var current = caravan.DaysWorthOfFood;
+                return new RouteEstimate { Food = FoodEstimate(current.days, current.tillRot, 0) };
             }
             using (WorldPath path = caravan.Tile.Layer.Pather.FindPath(caravan.Tile, tile, caravan))
             {
-                return path.Found ? CaravanArrivalTimeEstimator.EstimatedTicksToArrive(caravan.Tile, tile, path,
-                    0f, caravan.TicksPerMove, Find.TickManager.TicksAbs) : (int?)null;
+                if (!path.Found)
+                {
+                    return null;
+                }
+                int perMove = caravan.TicksPerMove;
+                int ticks = CaravanArrivalTimeEstimator.EstimatedTicksToArrive(caravan.Tile, tile, path, 0f, perMove, Find.TickManager.TicksAbs);
+                var transfers = caravan.PawnsListForReading.Select(pawn =>
+                {
+                    var group = new TransferableOneWay();
+                    group.things.Add(pawn);
+                    group.AdjustTo(1);
+                    return group;
+                }).ToList();
+                float days = DaysWorthOfFoodCalculator.ApproxDaysWorthOfFood(transfers, caravan.Tile, IgnorePawnsInventoryMode.DontIgnore,
+                    caravan.Faction, path, 0f, perMove);
+                float rot = DaysUntilRotCalculator.ApproxDaysUntilRot(CaravanInventoryUtility.AllInventoryItems(caravan), caravan.Tile, path, 0f, perMove);
+                return new RouteEstimate { Ticks = ticks, Food = FoodEstimate(days, rot, ticks) };
             }
         }
 
-        private static Dictionary<string, object> RouteResult(Caravan caravan, WorldObject target, string action, int? ticks, string reason)
+        private static Dictionary<string, object> RouteResult(Caravan caravan, WorldObject target, string action, RouteEstimate estimate, string reason)
         {
             return Dto.Obj(
                 Dto.Field("caravanId", caravan.ID),
@@ -151,7 +211,8 @@ namespace RiMCP.Read
                 Dto.Field("action", action),
                 Dto.Field("accepted", reason == null),
                 Dto.Field("reason", reason),
-                Dto.Field("estimatedTravelTicks", caravan.Tile == target.Tile || ticks > 0 ? ticks : null),
+                Dto.Field("estimatedTravelTicks", estimate?.Ticks),
+                Dto.Field("food", estimate?.Food),
                 Dto.Field("immobilizedByMass", caravan.ImmobilizedByMass));
         }
 
@@ -159,6 +220,8 @@ namespace RiMCP.Read
         {
             var food = caravan.DaysWorthOfFood;
             var pather = caravan.pather;
+            int? travel = pather.Moving && pather.curPath != null
+                ? CaravanArrivalTimeEstimator.EstimatedTicksToArrive(caravan, allowCaching: true) : (int?)null;
             var dto = Dto.Obj(
                 Dto.Field("id", caravan.ID),
                 Dto.Field("label", caravan.LabelCap),
@@ -176,8 +239,10 @@ namespace RiMCP.Read
                 Dto.Field("massCapacity", caravan.MassCapacity),
                 Dto.Field("foodEstimateCapped", food.days >= DaysWorthOfFoodCalculator.InfiniteDaysWorthOfFood),
                 Dto.Field("estimatedFoodDays", food.days),
-                Dto.Field("estimatedTicksToArrive", pather.Moving && pather.curPath != null
-                    ? CaravanArrivalTimeEstimator.EstimatedTicksToArrive(caravan, allowCaching: true) : (int?)null),
+                Dto.Field("estimatedTicksToArrive", travel),
+                Dto.Field("urgentlyHungry", Hungry(caravan)),
+                Dto.Field("immobilizedBy", Immobilized(caravan)),
+                Dto.Field("food", FoodEstimate(food.days, food.tillRot, travel)),
                 Dto.Field("pawns", caravan.PawnsListForReading.Select(pawn => Dto.Obj(
                     Dto.Field("id", ReadUtil.ThingId(pawn)),
                     Dto.Field("name", ReadUtil.PawnName(pawn)),

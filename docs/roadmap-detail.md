@@ -17,7 +17,8 @@ Record each package's status, commit and date here. Keep the verification eviden
 - Implemented and verified November 26 in `65188cd`: **W2.5** mover groups and **W2.6** notable things and map-wide building reads.
 - Implemented November 27 through **W2.13**, including the advance summary and new stops. Verified the adopted research-complete dialog in the running game. [Wave 2 workflow and checks](wave-2-workflow.md)
 - Completed Wave 2 on November 27 in the local working tree. **W2.14** starts Ideology rituals and handles roles through the native ceremony. **W2.15** previews scenarios before setup. [Wave 2 workflow and checks](wave-2-workflow.md)
-- **W3.1** adds the turn digest and revisioned survey and list reads. **W3.2** will use the digest in the run-between-turns workflow. [Wave 3 workflow](wave-3-workflow.md)
+- **W3.1** added the turn digest and revisioned survey and list reads. **W3.2–W3.12** add watcher-driven time, stock effects capture, construction planning, derived layers, structure templates, a source cache, thing notes, exports, suggested work priorities, and cooler and hunger checks. [Wave 3 workflow](wave-3-workflow.md)
+- **Wave 4** adds native caravan drafts and packing, food and spoilage estimates, departure and travel stops, and encounter reform. The Nov. 27 disposable round trip reached Swampston and returned to the loaded home map. [Campaign workflow](wave-4-campaign.md)
 
 ## Critical path
 
@@ -117,7 +118,7 @@ Each package can proceed once its dependencies are available.
 | --- | --- | --- | --- | --- | --- |
 | W3.1 | **L4 turn digest and deltas:** one read of 2 KB or less per cycle, plus `revision` and `since` on survey parts and lists | 4 | M | W2.2, W2.5, W1.A | `DigestReadService.cs`, `ReadRevisions.cs` |
 | W3.2 | **L3 run between turns:** an `advance_time` mode that keeps the game at speed and pauses only when a watcher fires; reads and orders while running | 4 | M | W2.1, W3.1 | `AdvanceRun.cs`, `TimeCommandService.cs`, proxy waits |
-| W3.3 | **D4 effect capture, spike:** do `DrawGhost` and `DrawExtraSelectionOverlays` run safely from the bridge's main-thread dispatcher, with Harmony prefixes on `GenDraw`? | 5 | H | – | New `Read/Effects/`, a Harmony dependency in `About.xml` |
+| W3.3 | **D4 effect capture, spike:** do `DrawGhost` and `DrawExtraSelectionOverlays` run safely from the bridge's main-thread dispatcher, with Harmony prefixes on `GenDraw`? | 5 | H | – | `Read/Effects/`, optional Harmony support in `About.xml` |
 | W3.4 | **D4 effect capture, build:** colour-named cell sets for placements and built things, as an `effects` layer | 4 | H | W3.3, W1.C | `Read/Effects/*`, `Read/Layers/*` |
 | W3.5 | **Plan evaluator:** one interface behind every `preview`, giving a verdict per cell, budget including queued blueprints (E5), roof ahead (E10), caller-index errors and wall warnings (G2), pen results (G5), and effects from W3.4 | 4 | M | W1.C, W2.3; W3.4 optional | `BuildingPlan.cs`, `BuildPlacement.cs`, `SurfacePlanService.cs`, `ZoneCommandService.cs` |
 | W3.6 | **P5 derived layers:** soil patches, ore, build sites, reach (on the game's region graph), chokepoints (snapshot, off the main thread, cached per load) | 5 | H | W1.C, W2.3 | `Read/Layers/Derived/*` |
@@ -168,9 +169,7 @@ One main agent handles time and decisions. Maintenance agents keep the colony op
 | W5.2 | **Agent attribution.** The agent name in `requestId` and in the agent log, plus a per-agent line in L1's measurements | 1 | L | W0.1 | `AgentLog.cs`, `AgentClients.cs` |
 | W5.3 | **Usage guide.** The recommended setup above, written as a short doc and as ready-to-use agent definitions (prompts, tool groups, model tier) for Claude Code and Codex, checked on one live session with the main agent and two maintenance agents | 3 | M | W3.1, W3.2, W5.1 | Usage guide and agent definitions |
 
-## Spikes before commitment
+## Spike results
 
-Grade-5 packages start with a time-boxed spike that answers one question and writes the answer into the package before any build:
-
-- **W3.3 effect capture:** is calling the drawing hooks outside rendering safe, and does a Harmony prefix on `GenDraw` catch everything a cooler, a sun lamp and a turret draw?
-- **W3.6 chokepoints:** what does a whole-map pass cost on a 250 × 250 map, and can it run on a snapshot off the main thread?
+- **W3.3 effect capture.** The scoped Harmony prefixes captured stock cooler and lamp placement, the turret placement worker’s range check, and the built turret’s selection overlay on the game thread. The capture covers these checked cell overlays.
+- **W3.6 chokepoints.** On the 250 × 250 fixture, the full derived response took 108.1 ms end to end on refresh and 37.0 ms from the cached snapshot. The worker computed explored region cuts from the main-thread snapshot.

@@ -51,6 +51,9 @@ namespace RiMCP.Command
         public readonly List<string> Blocking = new List<string>();
         public readonly Dictionary<string, ColonistState> Colonists = new Dictionary<string, ColonistState>();
         public readonly Dictionary<int, LetterState> Letters = new Dictionary<int, LetterState>();
+        public readonly Dictionary<int, string> HungryCaravans = new Dictionary<int, string>();
+        public readonly Dictionary<int, string> ImmobilizedCaravans = new Dictionary<int, string>();
+        public readonly Dictionary<int, string> PausedFormations = new Dictionary<int, string>();
         public readonly Dictionary<int, string> MovingCaravans = new Dictionary<int, string>();
     }
 
@@ -79,8 +82,8 @@ namespace RiMCP.Command
         public readonly object Game;
         public readonly TimeSpeed Speed;
         public readonly int StartTick;
-        public readonly int TargetTick;
-        public readonly float Hours;
+        public readonly int? TargetTick;
+        public readonly float? Hours;
         public readonly HashSet<string> StopOn;
         public readonly AdvanceWatch Watch;
         public readonly AdvanceSummary Summary;
@@ -98,7 +101,7 @@ namespace RiMCP.Command
         public bool Failed;
         public bool Revoked;
 
-        public AdvanceRun(int id, string requestId, object game, TimeSpeed speed, int startTick, int targetTick, float hours, IEnumerable<string> stopOn, AdvanceObservation baseline, AdvanceWatch watch = null)
+        public AdvanceRun(int id, string requestId, object game, TimeSpeed speed, int startTick, int? targetTick, float? hours, IEnumerable<string> stopOn, AdvanceObservation baseline, AdvanceWatch watch = null)
         {
             Id = id;
             RequestId = requestId;
@@ -141,7 +144,7 @@ namespace RiMCP.Command
                 StoppedBy = stop;
                 End("stopped", stop.Kind, current.Tick);
             }
-            else if (current.Tick >= TargetTick)
+            else if (TargetTick.HasValue && current.Tick >= TargetTick.Value)
             {
                 End("completed", "completed", current.Tick);
             }
@@ -157,7 +160,7 @@ namespace RiMCP.Command
             }
         }
 
-        public bool SameRequest(float hours, TimeSpeed speed, ICollection<string> stopOn, AdvanceWatch watch = null)
+        public bool SameRequest(float? hours, TimeSpeed speed, ICollection<string> stopOn, AdvanceWatch watch = null)
         {
             return AdvanceWatch.Equivalent(Watch, watch) && Hours == hours && Speed == speed && StopOn.SetEquals(stopOn);
         }
@@ -296,7 +299,7 @@ namespace RiMCP.Command
             return history.FirstOrDefault(run => run.Id == id && ReferenceEquals(run.Game, Current.Game));
         }
 
-        public static AdvanceRun Start(float hours, TimeSpeed speed, ICollection<string> stopOn, string requestId, out bool created, AdvanceWatch watch = null)
+        public static AdvanceRun Start(float? hours, TimeSpeed speed, ICollection<string> stopOn, string requestId, out bool created, AdvanceWatch watch = null)
         {
             history.RemoveAll(run => !ReferenceEquals(run.Game, Current.Game));
             AdvanceRun receipt = FindReceipt(history, Current.Game, requestId, hours, speed, stopOn, watch);
@@ -323,8 +326,8 @@ namespace RiMCP.Command
                 throw new CommandException(409, "RimWorld is not accepting time control right now.");
             }
 
-            int duration = (int)Math.Ceiling(hours * GenDate.TicksPerHour);
-            AdvanceRun run = new AdvanceRun(++nextId, requestId, Current.Game, speed, baseline.Tick, baseline.Tick + duration, hours, stopOn, baseline, watch);
+            int? targetTick = hours.HasValue ? baseline.Tick + (int)Math.Ceiling(hours.Value * GenDate.TicksPerHour) : (int?)null;
+            AdvanceRun run = new AdvanceRun(++nextId, requestId, Current.Game, speed, baseline.Tick, targetTick, hours, stopOn, baseline, watch);
             history.Add(run);
             if (history.Count > MaxHistory)
             {
@@ -336,7 +339,7 @@ namespace RiMCP.Command
         }
 
         // A repeated requestId returns its run; the same id with different arguments is a client error.
-        public static AdvanceRun FindReceipt(IEnumerable<AdvanceRun> runs, object game, string requestId, float hours, TimeSpeed speed, ICollection<string> stopOn, AdvanceWatch watch = null)
+        public static AdvanceRun FindReceipt(IEnumerable<AdvanceRun> runs, object game, string requestId, float? hours, TimeSpeed speed, ICollection<string> stopOn, AdvanceWatch watch = null)
         {
             if (requestId == null)
             {
@@ -525,10 +528,27 @@ namespace RiMCP.Command
             // Colonists who are not spawned: carried or in a container, on a caravan, watched since
             // they were spawned, and those who died since the last frame.
             var caravans = Find.WorldObjects.Caravans.Where(caravan => caravan.IsPlayerControlled).ToList();
-            foreach (var caravan in caravans.Where(each => each.pather.Moving))
+            foreach (var caravan in caravans)
             {
-                observation.MovingCaravans[caravan.ID] = caravan.LabelCap.StripTags();
-                observation.Traveling[caravan.ID] = new CaravanTravel(caravan);
+                if (caravan.pather.Moving)
+                {
+                    observation.MovingCaravans[caravan.ID] = caravan.LabelCap.StripTags();
+                    observation.Traveling[caravan.ID] = new CaravanTravel(caravan);
+                }
+                int hungry = CaravanService.Hungry(caravan);
+                if (hungry > 0)
+                {
+                    observation.HungryCaravans[caravan.ID] = hungry + " urgently hungry";
+                }
+                string immobilized = CaravanService.Immobilized(caravan);
+                if (immobilized != null)
+                {
+                    observation.ImmobilizedCaravans[caravan.ID] = immobilized;
+                }
+            }
+            foreach (var lord in CaravanService.Formations().Where(lord => lord.CurLordToil is LordToil_PrepareCaravan_Pause))
+            {
+                observation.PausedFormations[lord.loadID] = ((LordJob_FormAndSendCaravan)lord.LordJob).Status;
             }
             IEnumerable<Pawn> travelers = caravans.SelectMany(caravan => caravan.PawnsListForReading).Where(pawn => pawn.IsFreeColonist);
             pawns.AddRange(held.Concat(travelers).Concat(tracked.Where(pawn => pawn.Dead || pawn.MapHeld != null)).Distinct().Where(pawn => !pawns.Contains(pawn)).ToList());

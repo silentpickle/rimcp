@@ -65,7 +65,7 @@ namespace RiMCP.Read
                 ? Of(thing, Feature, thing.def) : null;
         }
 
-        private static bool IsExposedOre(Thing thing, Map map)
+        internal static bool IsExposedOre(Thing thing, Map map)
         {
             if (thing.def.building?.mineableThing == null || !thing.def.building.isResourceRock)
             {
@@ -94,7 +94,12 @@ namespace RiMCP.Read
             IntVec3 center = SurveyGeometry.Centre(positions);
             string[] sources = group.Select(site => site.Thing.def.modContentPack?.PackageId)
                 .Where(id => id != null).Distinct().OrderBy(id => id, StringComparer.Ordinal).ToArray();
+            string[] missingResearch = group.SelectMany(site => site.Thing.def.researchPrerequisites ?? Enumerable.Empty<ResearchProjectDef>())
+                .Where(project => !project.IsFinished).Select(project => project.defName).Distinct()
+                .OrderBy(name => name, StringComparer.Ordinal).ToArray();
             return Dto.Obj(
+                Dto.Field("unresearched", missingResearch.Length > 0 ? (bool?)true : null),
+                Dto.Field("missingResearch", missingResearch.Length > 0 ? missingResearch : null),
                 Dto.Field("id", first.Kind + "-" + first.Thing.thingIDNumber),
                 Dto.Field("kind", first.Kind),
                 Dto.Field("def", first.Kind == Ruin ? null : first.Def.defName),

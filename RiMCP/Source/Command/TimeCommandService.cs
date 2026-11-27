@@ -63,17 +63,21 @@ namespace RiMCP.Command
         public static BridgeResponse StartAdvance(BridgeRequest request, RouteMatch route)
         {
             AdvanceBody body = CommandUtil.ReadBody<AdvanceBody>(request);
-            if (!body.Hours.HasValue)
+            if (!body.Hours.HasValue && !body.UntilStopped)
             {
                 throw new CommandException(400, "Missing required field 'hours'.");
             }
-            float hours = body.Hours.Value;
-            if (float.IsNaN(hours) || hours < MinHours || hours > MaxHours)
+            float? hours = body.Hours;
+            if (hours.HasValue && (float.IsNaN(hours.Value) || hours < MinHours || hours > MaxHours))
             {
                 throw new CommandException(400, "Field 'hours' must be from " + MinHours + " to " + MaxHours + ".");
             }
             TimeSpeed speed = string.IsNullOrWhiteSpace(body.Speed) ? TimeSpeed.Superfast : ParseSpeed(body.Speed, false);
             string[] stopOn = body.StopOn == null ? AdvanceRun.DefaultStopOn : body.StopOn.Select(ParseCondition).Distinct().ToArray();
+            if (!hours.HasValue && stopOn.Length == 0)
+            {
+                throw new CommandException(400, "Choose a stop condition or set hours as a time limit.");
+            }
             if (body.RequestId != null && (body.RequestId.Trim().Length == 0 || body.RequestId.Length > MaxRequestIdLength))
             {
                 throw new CommandException(400, "Field 'requestId' must be 1 to " + MaxRequestIdLength + " characters.");
@@ -92,14 +96,29 @@ namespace RiMCP.Command
             AdvanceRun run = AdvanceRunner.Start(hours, speed, stopOn, body.RequestId, out created, watch);
             if (created)
             {
-                AgentLog.Done("Running time for " + AdvanceRun.Duration((int)Math.Ceiling(hours * GenDate.TicksPerHour)));
+                AgentLog.Done(hours.HasValue
+                    ? "Running time for " + AdvanceRun.Duration((int)Math.Ceiling(hours.Value * GenDate.TicksPerHour))
+                    : "Running time until a stop condition fires");
                 AgentLog.WaitFor(AdvanceRun.LogKey(run.Id));
             }
             else
             {
                 AgentLog.Replayed();
             }
-            Func<BridgeResponse> reply = () => CommandEnvelope.Ok(CommandUtil.ContextFor(null), created, SerializeRun(run));
+            Func<BridgeResponse> reply = () =>
+            {
+                CommandContext context = CommandUtil.ContextFor(null);
+                if (!body.Digest)
+                {
+                    return CommandEnvelope.Ok(context, created, SerializeRun(run));
+                }
+                if (!ReferenceEquals(Current.Game, run.Game))
+                {
+                    return BridgeResponse.Error(409, "The loaded game changed while waiting for the digest.");
+                }
+                return CommandEnvelope.Ok(context, created, DigestReadService.Describe(context.Map, run),
+                    DigestReadService.Budget(), detailSection: "recentLetters");
+            };
             return WithWait(request, run, reply);
         }
 
@@ -263,6 +282,12 @@ namespace RiMCP.Command
         [DataContract]
         private sealed class AdvanceBody
         {
+            [DataMember(Name = "untilStopped")]
+            public bool UntilStopped { get; set; }
+
+            [DataMember(Name = "digest")]
+            public bool Digest { get; set; }
+
             [DataMember(Name = "hours")]
             public float? Hours { get; set; }
 

@@ -49,7 +49,7 @@ namespace RiMCP.Command
                 signature.Add(spec.Rects);
             }
             if (body.Preview)
-                return CommandEnvelope.Ok(context, false, Designate(context.Map, plans, true).Data);
+                return CommandEnvelope.Ok(context, false, Designate(context.Map, plans, true, body.Verdicts).Data);
             var key = RequestKey.For(tool, requestId, context.Map, signature.ToArray());
             return CommandReceipts.Once(context, key, () => Designate(context.Map, plans, false));
         }
@@ -109,51 +109,51 @@ namespace RiMCP.Command
             }
         }
 
-        private static CommandResult Designate(Map map, List<Section> plans, bool preview)
+        private static CommandResult Designate(Map map, List<Section> plans, bool preview, bool includeVerdicts = false)
         {
             var outcomes = new CellOutcomes();
             var costs = new Dictionary<string, int>();
             int ready = 0;
-            foreach (Section section in plans)
+            var awaitingSupports = new List<object>();
+            var verdicts = includeVerdicts ? new List<object>() : null;
+            int omittedVerdicts = 0;
+            for (int index = 0; index < plans.Count; index++)
             {
+                Section section = plans[index];
                 outcomes.Outside += section.Outside;
                 int sectionReady = 0;
                 foreach (var cell in section.Cells)
                 {
-                    if (cell.Fogged(map))
-                    {
-                        outcomes.Reject(cell, "Unexplored cell.");
-                        continue;
-                    }
-                    if (section.Satisfied(map, cell))
+                    if (!cell.Fogged(map) && section.Satisfied(map, cell))
                     {
                         outcomes.AlreadySatisfied++;
+                        Record(cell, "alreadySatisfied");
                         continue;
                     }
-                    if (!section.Tool.Visible)
+                    string reason = SurfaceBlocker(map, section, cell, out bool waiting);
+                    if (reason != null)
                     {
-                        outcomes.Reject(cell, "The architect menu does not offer this order.");
-                        continue;
-                    }
-                    if (section.Kind == Surface.Roof && !RoofCollapseUtility.WithinRangeOfRoofHolder(cell, map, true))
-                    {
-                        outcomes.Reject(cell, "No completed roof support in range. Finish walls or columns first.");
-                        continue;
-                    }
-                    AcceptanceReport fit = section.Tool.CanDesignateCell(cell);
-                    if (!fit.Accepted)
-                    {
-                        outcomes.Reject(cell, string.IsNullOrEmpty(fit.Reason) ? "Cannot designate this cell." : fit.Reason.StripTags());
+                        outcomes.Reject(cell, reason);
+                        Record(cell, "rejected", reason);
                         continue;
                     }
                     if (preview)
                     {
                         sectionReady++;
+                        Record(cell, waiting ? "awaitingSupport" : "ready");
+                        if (waiting && awaitingSupports.Count < 12)
+                            awaitingSupports.Add(PlanEvaluation.Verdict(index, cell, "awaitingSupport"));
                         continue;
                     }
                     section.Tool.DesignateSingleCell(cell);
                     if (section.Satisfied(map, cell)) outcomes.Applied++;
                     else outcomes.Reject(cell, "The game did not apply the designation.");
+                }
+                void Record(IntVec3 cell, string status, string reason = null)
+                {
+                    if (verdicts == null) return;
+                    if (verdicts.Count == 256) omittedVerdicts++;
+                    else verdicts.Add(PlanEvaluation.Verdict(index, cell, status, reason));
                 }
                 ready += sectionReady;
                 if (sectionReady > 0 && section.Floor != null)
@@ -167,8 +167,26 @@ namespace RiMCP.Command
                 }
             }
             var data = Dto.Obj(Dto.Field("ready", ready), Dto.Field("cells", outcomes.ToDto()));
-            if (preview) data["materialEstimate"] = costs;
+            if (preview)
+            {
+                data["materialEstimate"] = costs;
+                data["materialBudget"] = PlanEvaluation.MaterialBudget(map, costs);
+                if (verdicts != null) data["verdicts"] = verdicts.ToArray();
+                if (omittedVerdicts > 0) data["omittedVerdicts"] = omittedVerdicts;
+                if (awaitingSupports.Count > 0) data["awaitingSupportExamples"] = awaitingSupports.ToArray();
+            }
             return new CommandResult(outcomes.Applied > 0, data);
+        }
+
+        private static string SurfaceBlocker(Map map, Section section, IntVec3 cell, out bool waiting)
+        {
+            waiting = false;
+            if (cell.Fogged(map)) return "Unexplored cell.";
+            if (!section.Tool.Visible) return "The architect menu does not offer this order.";
+            waiting = section.Kind == Surface.Roof && !RoofCollapseUtility.WithinRangeOfRoofHolder(cell, map, true);
+            if (waiting && !PlanEvaluation.HasQueuedRoofSupport(map, cell)) return "No completed or queued roof support in range.";
+            AcceptanceReport fit = section.Tool.CanDesignateCell(cell);
+            return fit.Accepted ? null : string.IsNullOrEmpty(fit.Reason) ? "Cannot designate this cell." : fit.Reason.StripTags();
         }
 
         [DataContract]
@@ -185,6 +203,7 @@ namespace RiMCP.Command
             [DataMember(Name = "mapId")] public string MapId { get; set; }
             [DataMember(Name = "sections")] public SectionBody[] Sections { get; set; }
             [DataMember(Name = "preview")] public bool Preview { get; set; }
+            [DataMember(Name = "verdicts")] public bool Verdicts { get; set; }
             [DataMember(Name = "requestId")] public string RequestId { get; set; }
         }
     }

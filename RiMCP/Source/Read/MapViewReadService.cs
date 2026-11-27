@@ -42,17 +42,63 @@ namespace RiMCP.Read
             ReadContext context = ReadContext.FromMap(request);
             ReadRequest query = context.Request;
             Map map = context.Map;
+            string[] names = query.List("layers").Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            string[] derived = names.Where(name => DerivedMapLayers.Names.Contains(name, StringComparer.OrdinalIgnoreCase)).ToArray();
+            if (derived.Length == 0)
+            {
+                return Render(context, names, derived, null);
+            }
+            var snapshot = DerivedMapLayers.Get(map, query.OptionalBool("refreshDerived") == true);
+            string load = GameContext.LoadId;
+            BridgeResponse Reply()
+            {
+                if (GameContext.LoadId != load || !Find.Maps.Contains(map))
+                {
+                    return BridgeResponse.Error(409, "The map changed while its snapshot was being analyzed. Retry the map read.");
+                }
+                if (!snapshot.Ready.IsSet)
+                {
+                    return BridgeResponse.Error(409, "The derived map snapshot is still being analyzed. Retry shortly.");
+                }
+                try
+                {
+                    return Render(context, names, derived, snapshot);
+                }
+                catch (BridgeException exception)
+                {
+                    return BridgeResponse.Error(exception.StatusCode, exception.Message);
+                }
+            }
+            if (snapshot.Ready.IsSet)
+            {
+                return Reply();
+            }
+            BridgeResponse pending = BridgeResponse.Error(409, "The derived map snapshot is still being analyzed. Retry shortly.");
+            pending.Deferred = new DeferredReply(snapshot.Ready, 3, Reply);
+            return pending;
+        }
+
+        private static BridgeResponse Render(ReadContext context, string[] requestedLayers, string[] derived, DerivedMapLayers.Snapshot snapshot)
+        {
+            ReadRequest query = context.Request;
+            Map map = context.Map;
             int scale = Scale(query);
             string projection = Projection(query);
             bool countsOnly = projection == MapViewShape.Counts;
             bool cellsOnly = projection == MapViewShape.Cells;
             string tile = query.Get("tile");
             CellRect bounds = tile == null ? Bounds(query, map, scale, countsOnly, cellsOnly) : SurveyTiles.Resolve(query, map.Size);
-            MapLayer[] layers = MapLayerRegistry.Select(query.List("layers")).ToArray();
+            var activeLayers = MapLayerRegistry.Select(requestedLayers.Where(name => !name.Equals("effects", StringComparison.OrdinalIgnoreCase) && !derived.Contains(name))).ToList();
+            if (requestedLayers.Contains("effects", StringComparer.OrdinalIgnoreCase))
+            {
+                activeLayers.Add(EffectCapture.Layer(map, query.Get("effectThingId"), bounds));
+            }
+            activeLayers.AddRange(derived.Select(name => snapshot.Layer(name)));
+            MapLayer[] layers = activeLayers.ToArray();
 
             if (cellsOnly)
             {
-                return ReadCells(context, bounds, layers, scale);
+                return ReadCells(context, bounds, layers, scale, snapshot?.Tick);
             }
 
             var meanings = new Dictionary<char, string>();
@@ -68,6 +114,7 @@ namespace RiMCP.Read
                 layer => ReadLayer(map, bounds, scale, countsOnly, cell => layer.Sample(cell, map)).DescribeLayer(layer, countsOnly));
 
             return ReadEnvelope.Ok(context, Dto.Obj(
+                Dto.Field("derivedTick", snapshot?.Tick),
                 Dto.Field("origin", Dto.Obj(Dto.Field("x", bounds.minX), Dto.Field("z", bounds.minZ))),
                 Dto.Field("tile", tile),
                 Dto.Field("width", bounds.Width),
@@ -79,7 +126,7 @@ namespace RiMCP.Read
                 Dto.Field("layers", layerDtos.Count == 0 ? null : layerDtos)));
         }
 
-        private static BridgeResponse ReadCells(ReadContext context, CellRect bounds, MapLayer[] layers, int scale)
+        private static BridgeResponse ReadCells(ReadContext context, CellRect bounds, MapLayer[] layers, int scale, int? derivedTick)
         {
             if (scale != 1 || bounds.Width * bounds.Height > MapViewShape.MaxDetailedCells || layers.Length == 0)
             {
@@ -102,7 +149,7 @@ namespace RiMCP.Read
                 }
                 return row;
             }).ToArray();
-            return ReadEnvelope.Ok(context, Dto.Obj(Dto.Field("cells", cells)));
+            return ReadEnvelope.Ok(context, Dto.Obj(Dto.Field("cells", cells), Dto.Field("derivedTick", derivedTick)));
         }
 
         private static MapLayerProjection ReadLayer(Map map, CellRect bounds, int scale, bool countsOnly, Func<IntVec3, char> sample)

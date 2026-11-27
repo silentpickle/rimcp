@@ -58,6 +58,9 @@ namespace RiMCP.Command
             Appeared("hostiles", "hostiles", Threats, observation => observation.Threat),
             Appeared("lowFood", "low food", Food, observation => observation.LowFood),
             Letter("threatLetter", "a threat letter", threat: true, stopAlias: "letter"),
+            CaravanSignal("caravanHungry", "urgent caravan hunger", observation => observation.HungryCaravans, "caravan"),
+            CaravanSignal("caravanImmobilized", "an immobilized caravan", observation => observation.ImmobilizedCaravans, "caravan"),
+            CaravanSignal("caravanDepartureBlocked", "paused caravan packing", observation => observation.PausedFormations, "formation"),
             new Watcher("caravanRouteEnded", "a caravan route ending", Pawns, EndedCaravans, defaultStop: false),
             Letter("letter", "a letter", threat: false),
             new Watcher("built", "construction completed", Pawns, Built, defaultStop: false),
@@ -112,6 +115,22 @@ namespace RiMCP.Command
                     events.Add(new AdvanceEvent { Kind = kind, Tick = now.Tick, PawnId = pawn.Id, PawnName = pawn.Name, Detail = detail(pawn) });
                 }
             }, defaultStop);
+        }
+
+        private static Watcher CaravanSignal(string kind, string summary,
+            Func<AdvanceObservation, Dictionary<int, string>> select, string subject)
+        {
+            return new Watcher(kind, summary, Pawns, (before, now, events) =>
+            {
+                Dictionary<int, string> earlier = select(before);
+                foreach (var signal in select(now).OrderBy(pair => pair.Key))
+                {
+                    if (!earlier.ContainsKey(signal.Key))
+                    {
+                        events.Add(Event(kind, now.Tick, subject + " " + signal.Key + ": " + signal.Value));
+                    }
+                }
+            }, defaultStop: false);
         }
 
         private static void Built(AdvanceObservation before, AdvanceObservation now, List<AdvanceEvent> events)

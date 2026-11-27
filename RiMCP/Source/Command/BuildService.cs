@@ -73,7 +73,17 @@ namespace RiMCP.Command
                 }
             }
 
+            object effects = null;
+            if (query.OptionalBool("effects") == true)
+            {
+                if (rect.Area != 1 || positions.Count != 1 || positions[0].Fogged(map))
+                {
+                    throw new BridgeException(400, "Request placement effects at one explored cell.");
+                }
+                effects = EffectCapture.Describe(EffectCapture.Placement(map, building.Def, positions[0], building.Rotation));
+            }
             return ReadEnvelope.Ok(context, Dto.Obj(
+                Dto.Field("effects", effects),
                 Dto.Field("building", building.Describe()),
                 Dto.Field("available", unavailable == null),
                 Dto.Field("reason", unavailable),
@@ -117,12 +127,12 @@ namespace RiMCP.Command
                 .GroupBy(item => new { item.p.Def, item.p.Stuff, item.p.Rotation }))
             {
                 var first = group.First();
-                var resolved = BuildPlacement.Resolve(group.Key.Def, group.Key.Stuff, group.Key.Rotation, "placements[" + first.index + "].");
+                var resolved = BuildPlacement.Resolve(group.Key.Def, group.Key.Stuff, group.Key.Rotation, "placements[" + first.p.EntryIndex + "].");
                 foreach (var item in group) buildings[item.index] = resolved;
             }
             var plan = new BuildingPlan(buildings, body.Placements);
             if (body.Preview)
-                return CommandEnvelope.Ok(context, false, plan.Preview(map, rooms));
+                return CommandEnvelope.Ok(context, false, plan.Preview(map, rooms, body.Verdicts, body.Effects));
             // The material counts only when given: the game's default depends on what the colony has.
             RequestKey key = RequestKey.For("place_blueprint", requestId, map, (compact ? "shape:" : "") + string.Join(";", buildings.Select((building, i) =>
                 building.Def.defName + "," + (string.IsNullOrWhiteSpace(body.Placements[i].Stuff) ? "" : building.Stuff.defName) + "," + BuildPlacement.RotationName(building.Rotation) + "," + body.Placements[i].X + "," + body.Placements[i].Z).ToArray()));
@@ -234,6 +244,10 @@ namespace RiMCP.Command
         {
             [DataMember(Name = "preview")] public bool Preview { get; set; }
 
+            [DataMember(Name = "verdicts")] public bool Verdicts { get; set; }
+
+            [DataMember(Name = "effects")] public bool Effects { get; set; }
+
             [DataMember(Name = "mapId")]
             public string MapId { get; set; }
 
@@ -255,6 +269,7 @@ namespace RiMCP.Command
         [DataContract]
         private sealed class PlacementBody
         {
+            public int EntryIndex;
             [DataMember(Name = "shape")] public string Shape { get; set; }
             [DataMember(Name = "width")] public int? Width { get; set; }
             [DataMember(Name = "height")] public int? Height { get; set; }

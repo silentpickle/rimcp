@@ -18,22 +18,27 @@ namespace RiMCP.Read
             ReadContext context = ReadContext.FromMap(request);
             int maxBytes = Math.Min(DigestBytes, ReadReplyBudget.MaxBytes(context.Request));
             context.Request.Query[ReplyLimits.Argument] = maxBytes.ToString(CultureInfo.InvariantCulture);
-            return ReadEnvelope.Ok(context, Describe(context.Map), detailSection: "recentLetters");
+            return ReadEnvelope.Ok(context, Describe(context.Map, AdvanceRunner.LatestInLoadedGame), detailSection: "recentLetters");
         }
 
-        private static object Describe(Map map)
+        internal static ReadRequest Budget()
         {
-            Pawn[] core = PawnReadService.PawnsForFilter(map, "core").Select(role => role.Pawn).ToArray();
-            FoodSummary food = map.IsPlayerHome ? FoodSummary.Of(map) : null;
-            IntVec3[] colonists = SurveyMovers.VisibleColonists(map);
-            IntVec3 origin = colonists.Length == 0 ? map.Center : SurveyGeometry.Centre(colonists);
-            var movers = new SurveyMovers(map, origin, colonists);
+            return ReadRequest.FromUri(new Uri("http://localhost/?maxBytes=" + DigestBytes.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        internal static object Describe(Map map, AdvanceRun run)
+        {
+            Pawn[] core = map == null ? Array.Empty<Pawn>() : PawnReadService.PawnsForFilter(map, "core").Select(role => role.Pawn).ToArray();
+            FoodSummary food = map?.IsPlayerHome == true ? FoodSummary.Of(map) : null;
+            IntVec3[] colonists = map == null ? Array.Empty<IntVec3>() : SurveyMovers.VisibleColonists(map);
+            IntVec3 origin = colonists.Length == 0 ? map?.Center ?? IntVec3.Invalid : SurveyGeometry.Centre(colonists);
+            var movers = map == null ? null : new SurveyMovers(map, origin, colonists);
             TickManager clock = Find.TickManager;
             return Dto.Obj(
                 Dto.Field("paused", clock.Paused),
                 Dto.Field("speed", clock.CurTimeSpeed.ToString()),
                 Dto.Field("blockedBy", BlockingWindows.Names().Take(3).Select(Bounded).ToArray()),
-                Dto.Field("risks", Dto.Obj(
+                Dto.Field("risks", map == null ? null : Dto.Obj(
                     Dto.Field("downed", core.Count(pawn => pawn.Downed)),
                     Dto.Field("urgentlyHungry", core.Count(pawn =>
                         pawn.needs?.food != null && pawn.needs.food.CurCategory >= HungerCategory.UrgentlyHungry)),
@@ -47,12 +52,12 @@ namespace RiMCP.Read
                     Dto.Field("looseAllowed", Math.Round(food.LooseAllowed.Total, 1)),
                     Dto.Field("looseForbidden", Math.Round(food.LooseForbidden.Total, 1)),
                     Dto.Field("daysLeft", food.EatenPerDay > 0f ? (double?)Math.Round(food.Stored.Total / food.EatenPerDay, 1) : null))),
-                Dto.Field("movers", movers.DescribeDigest(3)),
+                Dto.Field("movers", movers?.DescribeDigest(3)),
                 Dto.Field("recentLetters", Find.LetterStack?.LettersListForReading.AsEnumerable().Reverse().Take(2).Select(letter => Dto.Obj(
                     Dto.Field("id", letter.GetUniqueLoadID()),
                     Dto.Field("label", Bounded(letter.Label.ToString())),
                     Dto.Field("def", letter.def?.defName))).ToArray()),
-                Dto.Field("advance", DescribeAdvance(AdvanceRunner.LatestInLoadedGame)));
+                Dto.Field("advance", DescribeAdvance(run)));
         }
 
         private static object DescribeAdvance(AdvanceRun run)
@@ -67,6 +72,7 @@ namespace RiMCP.Read
                 Dto.Field("status", run.Status),
                 Dto.Field("endReason", run.EndReason),
                 Dto.Field("startTick", run.StartTick),
+                Dto.Field("targetTick", run.TargetTick),
                 Dto.Field("endTick", run.EndTick < 0 ? (int?)null : run.EndTick),
                 Dto.Field("summary", run.Summary.Describe(researchLimit: 2)),
                 Dto.Field("recentEvents", run.Events.Skip(Math.Max(0, run.Events.Count - 3)).Select(change => Dto.Obj(

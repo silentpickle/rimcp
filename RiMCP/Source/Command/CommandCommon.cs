@@ -31,16 +31,17 @@ namespace RiMCP.Command
 
     internal static class CommandEnvelope
     {
-        public static BridgeResponse Ok(CommandContext context, bool changed, object data)
+        public static BridgeResponse Ok(CommandContext context, bool changed, object data, ReadRequest budget = null, string detailSection = null)
         {
-            object envelope = Dto.Obj(
+            var envelope = Dto.Obj(
                 Dto.Field("schemaVersion", "1"),
                 Dto.Field("loadId", GameContext.LoadId),
                 Dto.Field("tick", context.Tick),
                 Dto.Field("mapId", context.Map == null ? null : context.Map.uniqueID.ToString()),
                 Dto.Field("changed", changed),
                 Dto.Field("data", data));
-            BridgeResponse response = BridgeResponse.Json(200, Json.Serialize(envelope));
+            BridgeResponse response = BridgeResponse.Json(200, budget == null ? Json.Serialize(envelope)
+                : ReadReplyBudget.Serialize(envelope, budget, detailSection: detailSection));
             response.Changed = changed;
             return response;
         }

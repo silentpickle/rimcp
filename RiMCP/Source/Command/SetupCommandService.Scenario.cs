@@ -43,7 +43,7 @@ namespace RiMCP.Command
             return ReadEnvelope.Ok(context, preview, detailSection: "startingSupplies");
         }
 
-        private static Dictionary<string, object> DescribeScenario(Scenario scenario)
+        internal static Dictionary<string, object> DescribeScenario(Scenario scenario)
         {
             string[] manual = UnsupportedScreens(scenario);
             return Dto.Obj(

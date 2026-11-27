@@ -8,6 +8,9 @@
     <li>1.6</li>
     <li>1.7</li>
   </supportedVersions>
+  <loadAfter>
+    <li>brrainz.harmony</li>
+  </loadAfter>
   <description>Agentic intelligence for the Rim.
 
 What is this?
@@ -44,6 +47,7 @@ Things to try
 
 Requirements
 • RimWorld 1.6 or 1.7.
+• The optional effects layer uses the Harmony mod.
 • An AI client with support for local (stdio) MCP servers. Tested with Codex, Claude Code &amp; OpenCode.
 
 Setup

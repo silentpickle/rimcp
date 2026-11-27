@@ -18,10 +18,12 @@ namespace RiMCP.Command
         private static PlacementBody[] Expand(PlacementBody[] entries)
         {
             var cells = new List<PlacementBody>();
-            foreach (PlacementBody entry in entries)
+            for (int index = 0; index < entries.Length; index++)
             {
+                PlacementBody entry = entries[index];
                 if (entry == null || !entry.X.HasValue || !entry.Z.HasValue)
-                    throw new CommandException(400, "Every placement needs x and z.");
+                    throw new CommandException(400, "placements[" + index + "] needs x and z.");
+                entry.EntryIndex = index;
                 if (entry.Shape == null)
                 {
                     if (entry.Width.HasValue || entry.Height.HasValue || entry.Openings != null || entry.Sides != null || entry.Columns)
@@ -30,7 +32,14 @@ namespace RiMCP.Command
                 }
                 else
                 {
-                    ExpandShape(entry, cells);
+                    try
+                    {
+                        ExpandShape(entry, cells);
+                    }
+                    catch (CommandException exception)
+                    {
+                        throw new CommandException(400, "placements[" + index + "]: " + exception.Message);
+                    }
                 }
                 if (cells.Count > MaxExpandedPlacements)
                     throw new CommandException(400, "Split plans larger than 256 expanded placements.");
@@ -77,7 +86,7 @@ namespace RiMCP.Command
                 if (side == null && cell.x == bounds.maxX) sides.TryGetValue("east", out side);
                 if (side == null && cell.x == bounds.minX) sides.TryGetValue("west", out side);
                 bool changedDef = side?.Def != null && side.Def != entry.Def;
-                cells.Add(new PlacementBody { Def = side?.Def ?? entry.Def,
+                cells.Add(new PlacementBody { EntryIndex = entry.EntryIndex, Def = side?.Def ?? entry.Def,
                     Stuff = side?.Stuff ?? (changedDef ? null : entry.Stuff), Rotation = changedDef ? null : entry.Rotation, X = cell.x, Z = cell.z });
             }
             if (entry.Columns)
@@ -91,7 +100,7 @@ namespace RiMCP.Command
                 int nx = (width - 2 + 8) / 9, nz = (height - 2 + 8) / 9;
                 for (int ix = 0; ix < nx; ix++)
                     for (int iz = 0; iz < nz; iz++)
-                        cells.Add(new PlacementBody { Def = "Column", Stuff = entry.Stuff,
+                        cells.Add(new PlacementBody { EntryIndex = entry.EntryIndex, Def = "Column", Stuff = entry.Stuff,
                             X = x + 1 + (2 * ix + 1) * (width - 2) / (2 * nx),
                             Z = z + 1 + (2 * iz + 1) * (height - 2) / (2 * nz) });
             }
@@ -100,6 +109,7 @@ namespace RiMCP.Command
         private sealed class BuildingPlan
         {
             private readonly BuildPlacement[] buildings;
+            private readonly PlacementBody[] entries;
             private readonly IntVec3[] anchors;
             private readonly CellRect[] footprints;
             private readonly HashSet<IntVec3> impassable = new HashSet<IntVec3>();
@@ -107,6 +117,7 @@ namespace RiMCP.Command
             public BuildingPlan(BuildPlacement[] buildings, PlacementBody[] entries)
             {
                 this.buildings = buildings;
+                this.entries = entries;
                 anchors = entries.Select(p => new IntVec3(p.X.Value, 0, p.Z.Value)).ToArray();
                 footprints = buildings.Select((b, i) => GenAdj.OccupiedRect(anchors[i], b.Rotation, b.Def.Size)).ToArray();
                 for (int i = 0; i < buildings.Length; i++)
@@ -200,10 +211,13 @@ namespace RiMCP.Command
                 return rooms.Select(room => RoofCoverage(room, supports, map)).ToArray();
             }
 
-            public object Preview(Map map, PlacementBody[] rooms)
+            public object Preview(Map map, PlacementBody[] rooms, bool includeVerdicts, bool includeEffects)
             {
                 var costs = new Dictionary<string, int>();
                 var rejected = new List<object>();
+                var warnings = new List<object>();
+                var verdicts = includeVerdicts ? new List<object>() : null;
+                var penMarkers = new List<IntVec3>();
                 var accepted = new Dictionary<IntVec3, List<BuildPlacement>>();
                 var supports = new HashSet<IntVec3>();
                 var plannedAnchors = new HashSet<System.Tuple<IntVec3, ThingDef, ThingDef, Rot4>>();
@@ -214,11 +228,19 @@ namespace RiMCP.Command
                     IntVec3 cell = anchors[i];
                     var identity = Tuple.Create(cell, b.Def, b.Stuff, b.Rotation);
                     string reason = null;
+                    Building wall = cell.InBounds(map) && !cell.Fogged(map) ? cell.GetEdifice(map) : null;
+                    if (b.Def.building?.isWall == true && wall?.def.building?.isWall == true && wall.Stuff != b.Stuff)
+                    {
+                        warnings.Add(PlanEvaluation.Verdict(entries[i].EntryIndex, cell, "differentWallMaterial",
+                            "Existing " + wall.LabelNoCount + " uses another material."));
+                    }
                     if (!cell.InBounds(map))
                         reason = "Outside the map.";
                     else if (plannedAnchors.Contains(identity) || (!cell.Fogged(map) && b.Existing(cell, map) != null))
                     {
                         if (b.Def.holdsRoof) supports.UnionWith(footprints[i]);
+                        verdicts?.Add(PlanEvaluation.Verdict(entries[i].EntryIndex, cell, "alreadySatisfied"));
+                        if (b.Def.HasComp(typeof(CompAnimalPenMarker))) penMarkers.Add(cell);
                         satisfied++;
                         continue;
                     }
@@ -229,9 +251,12 @@ namespace RiMCP.Command
                         reason = "Overlaps an earlier placement in this request.";
                     if (reason != null)
                     {
-                        rejected.Add(Dto.Obj(Dto.Field("def", b.Def.defName), Dto.Field("x", cell.x), Dto.Field("z", cell.z), Dto.Field("reason", reason)));
+                        rejected.Add(Dto.Obj(Dto.Field("entryIndex", entries[i].EntryIndex), Dto.Field("def", b.Def.defName), Dto.Field("x", cell.x), Dto.Field("z", cell.z), Dto.Field("reason", reason)));
+                        verdicts?.Add(PlanEvaluation.Verdict(entries[i].EntryIndex, cell, "rejected", reason));
                         continue;
                     }
+                    verdicts?.Add(PlanEvaluation.Verdict(entries[i].EntryIndex, cell, "ready"));
+                    if (b.Def.HasComp(typeof(CompAnimalPenMarker))) penMarkers.Add(cell);
                     foreach (var c in footprints[i])
                     {
                         if (!accepted.ContainsKey(c)) accepted[c] = new List<BuildPlacement>();
@@ -247,8 +272,20 @@ namespace RiMCP.Command
                         costs[name] = count + material.count;
                     }
                 }
+                int[] effectIndices = includeEffects ? Enumerable.Range(0, buildings.Length).Where(index =>
+                    anchors[index].InBounds(map) && !anchors[index].Fogged(map) && EffectCapture.Supports(buildings[index].Def)).ToArray() : null;
                 return Dto.Obj(Dto.Field("ready", ready), Dto.Field("alreadySatisfied", satisfied), Dto.Field("rejectedCount", rejected.Count),
                     Dto.Field("results", rejected.ToArray()), Dto.Field("materialEstimate", costs),
+                    Dto.Field("materialBudget", PlanEvaluation.MaterialBudget(map, costs)),
+                    Dto.Field("verdicts", verdicts?.ToArray()),
+                    Dto.Field("effects", effectIndices?.Take(4).Select(index => Dto.Obj(
+                        Dto.Field("entryIndex", entries[index].EntryIndex), Dto.Field("anchor", ReadUtil.Cell(anchors[index])),
+                        Dto.Field("groups", EffectCapture.Describe(EffectCapture.Placement(map, buildings[index].Def,
+                            anchors[index], buildings[index].Rotation))))).ToArray()),
+                    Dto.Field("omittedEffectPlacements", effectIndices?.Length > 4 ? (int?)(effectIndices.Length - 4) : null),
+                    Dto.Field("warnings", warnings.Count == 0 ? null : warnings.ToArray()),
+                    Dto.Field("pens", penMarkers.Count == 0 ? null : penMarkers.Distinct().Take(4)
+                        .Select(marker => PlanEvaluation.PreviewPen(map, marker, accepted)).ToArray()),
                     Dto.Field("roofSupport", rooms.Select(room => RoofCoverage(room, supports, map)).ToArray()),
                     Dto.Field("columns", anchors.Where((c, i) => buildings[i].Def.defName == "Column").Select(Position).ToArray()),
                     Dto.Field("coolers", CoolerSides()),
