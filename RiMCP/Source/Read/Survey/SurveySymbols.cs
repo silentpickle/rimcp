@@ -9,12 +9,17 @@ namespace RiMCP.Read
         public const char Structure = '#';
         public const char Water = '~';
         public const char Rock = '^';
+        private const string PriorityMarkers = "CHPVDW#";
         private const int TerrainShare = 4;
 
         public static readonly Dictionary<char, string> Classes = new Dictionary<char, string>
         {
             { Colonist, "colonist" },
             { Hostile, "hostile" },
+            { 'P', "animal threat" },
+            { 'V', "visitors" },
+            { 'D', "colony animals outside Home" },
+            { 'W', "notable wildlife" },
             { Structure, "structure" },
             { MapLayerProjection.Unexplored, "unexplored" },
             { Water, "water" },
@@ -45,17 +50,12 @@ namespace RiMCP.Read
 
         public static char Priority(IReadOnlyDictionary<char, int> counts, int cells, char majority)
         {
-            if (counts.ContainsKey(Colonist))
+            foreach (char marker in PriorityMarkers)
             {
-                return Colonist;
-            }
-            if (counts.ContainsKey(Hostile))
-            {
-                return Hostile;
-            }
-            if (counts.ContainsKey(Structure))
-            {
-                return Structure;
+                if (counts.ContainsKey(marker))
+                {
+                    return marker;
+                }
             }
             if (EnoughCoverage(counts, Water, cells))
             {

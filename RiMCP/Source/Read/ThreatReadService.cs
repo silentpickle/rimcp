@@ -76,7 +76,7 @@ namespace RiMCP.Read
             return pawn != null && (pawn.HostileTo(Faction.OfPlayer) || IsManhunter(pawn) || IsPredator(pawn));
         }
 
-        private static bool IsManhunter(Pawn pawn)
+        internal static bool IsManhunter(Pawn pawn)
         {
             return pawn != null && pawn.MentalStateDef != null && pawn.MentalStateDef.defName.IndexOf("Manhunter", System.StringComparison.OrdinalIgnoreCase) >= 0;
         }

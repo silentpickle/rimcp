@@ -48,6 +48,12 @@ Map views take `scale` from 1 to 16. Width, height, and origin are still in game
 
 `get_map_survey` gives a whole-map overview up to 45 tiles on either side. It gives priority to visible colonists, hostiles, and structures. Each overview row has a corresponding south coordinate in `rowZ`. The survey also reports the largest connected region per class and names a visible majority class as background. Use `regionsPerClass` from 0 to 3 to control the detail. Region `bounds` are `[x,z,width,height]` and `center` is `[x,z]`.
 
+`get_map_survey` accepts `include: ["movers", "notable"]`. Use `overview: false` to read those sections on their own. These requests show four ranked groups per section by default. `moverLimit` and `notableLimit` accept 0–12, and each section reports how many groups were omitted. A survey with either section uses a smaller overview and defaults to zero terrain regions.
+
+Movers group visible parties by the game's Lord and nearby animals by kind. Pack animals, predators, large wildlife, explosive animals, and tameable producers can get their own groups. Heading comes from visible active path destinations. `nearEdge` describes where an observed group is now. `walkHours` is a straight-line estimate to the nearest visible colonist. Notable groups include visible non-colony landmarks, unclaimed walls and doors, exposed ore, and usable items outside Home and storage. `sampleId` identifies a representative thing.
+
+Use `list_buildings` with `scope: "map"` to include visible map buildings and exposed ore under the same area and def filters. `get_building` can inspect those IDs. Map-wide building reads leave out ordinary rock and non-colony storage contents.
+
 Survey tiles use a separate 32-cell lattice anchored at the southwest map corner. For example, `get_map_view` with `{"tile":"x4z2"}` opens the tile at `(128,64)`. Edge tiles crop at the map boundary. Pass `tile` in place of `x`, `z`, `width`, and `height`.
 
 Use `as: "counts"` for exact counts of the underlying symbols, including `?` for unexplored cells. Counts views omit grid rows and can cover up to 400×400 cells. The optional roof and designation layers support both projections and keep `markedCells` in game cells at every scale.

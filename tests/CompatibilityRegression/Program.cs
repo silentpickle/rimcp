@@ -310,6 +310,8 @@ internal static partial class Program
         Test("S1_tile_edges", CheckSurveyTileEdges);
         Test("S1_tile_priority", CheckSurveyPriority);
         Test("S1_region_connectivity", CheckSurveyRegions);
+        Test("S2_path_heading", CheckSurveyHeading);
+        Test("S3_cluster_radius", CheckSurveyClusters);
         Test("order_pawn and designate offer exactly the kinds they handle, and queue reaches the handler", () =>
         {
             CheckOfferedKinds("order_pawn", "order", "RiMCP.Command.PawnOrderCommandService", "Orders");

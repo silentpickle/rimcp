@@ -18,6 +18,8 @@ namespace RiMCP.Read
             ReadContext context = ReadContext.FromMap(request);
 
             ReadRequest query = context.Request;
+            string scope = query.Get("scope");
+            bool whole = IsMapScope(scope);
             ReadRequest filter = query.Section("filter", FilterKeys, FlatFilterKeys);
             string category = (filter ?? query).Get("category");
             string normalizedCategory = string.IsNullOrWhiteSpace(category) ? null : category.ToLowerInvariant();
@@ -27,7 +29,7 @@ namespace RiMCP.Read
             ReadProjection fields = ReadProjection.Parse(query, ReadShape.BuildingFields);
             // Ordinal and numeric sort keys avoid culture-aware string comparison across every
             // colony building, walls and conduits included, on each page.
-            IEnumerable<Building> source = context.Map.listerBuildings.allBuildingsColonist
+            IEnumerable<Building> source = (whole ? MapBuildings(context.Map) : context.Map.listerBuildings.allBuildingsColonist)
                 .Where(building => (included.Count == 0 || included.Contains(building.def)) && !excluded.Contains(building.def))
                 .Where(building => area.Contains(building.Position))
                 .Where(building => MatchesCategory(building, normalizedCategory))
@@ -38,7 +40,8 @@ namespace RiMCP.Read
 
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("category", category),
-                Dto.Field("buildings", page.Items.Select(building => ReadProjection.Serialize(fields, building, () => SerializeBuilding(building, query.Detail, includeContents))).ToArray())),
+                Dto.Field("scope", scope),
+                Dto.Field("buildings", page.Items.Select(building => ReadProjection.Serialize(fields, building, () => SerializeBuilding(building, query.Detail, includeContents && (!whole || building.Faction == Faction.OfPlayer)))).ToArray())),
                 page.Truncated,
                 page.NextCursor, "buildings");
         }
@@ -59,12 +62,15 @@ namespace RiMCP.Read
 
         private static object DescribeId(Map map, string id, ReadProjection fields)
         {
-            Building building = FindBuilding(map, id);
-            if (building == null)
+            Building colonyBuilding = FindBuilding(map, id);
+            if (colonyBuilding != null)
             {
-                return null;
+                return ReadProjection.Serialize(fields, colonyBuilding, () => DescribeBuilding(colonyBuilding));
             }
-            return ReadProjection.Serialize(fields, building, () => DescribeBuilding(building));
+            Building building = map.listerThings.AllThings.OfType<Building>()
+                .FirstOrDefault(candidate => MatchesId(candidate, id) && SurveyNotable.VisibleBuilding(candidate, map));
+            return building == null ? null :
+                ReadProjection.Serialize(fields, building, () => SerializeBuilding(building, ReadDetail.Summary, false));
         }
 
         private static object DescribeBuilding(Building building)
@@ -99,7 +105,30 @@ namespace RiMCP.Read
                 return null;
             }
             return map.listerBuildings.allBuildingsColonist
-                .FirstOrDefault(building => building.ThingID == id || building.GetUniqueLoadID() == id);
+                .FirstOrDefault(building => MatchesId(building, id));
+        }
+
+        private static bool IsMapScope(string scope)
+        {
+            if (scope == null || string.Equals(scope, "colony", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            if (string.Equals(scope, "map", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            throw new BridgeException(400, "Field 'scope' must be colony or map.");
+        }
+
+        private static IEnumerable<Building> MapBuildings(Map map)
+        {
+            return map.listerThings.AllThings.OfType<Building>().Where(building => SurveyNotable.VisibleBuilding(building, map));
+        }
+
+        private static bool MatchesId(Building building, string id)
+        {
+            return building.ThingID == id || building.GetUniqueLoadID() == id;
         }
 
         private static bool MatchesCategory(Building building, string normalized)
