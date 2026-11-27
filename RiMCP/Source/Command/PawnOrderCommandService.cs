@@ -67,8 +67,7 @@ namespace RiMCP.Command
                 PawnUnable = "The pawn cannot move right now.",
                 TargetUnsuitable = "There is no cell to stand on near there."
             },
-            // Fires at the target with a ranged weapon, or attacks it in melee without one. Out of
-            // range, a ranged attack is refused, as the menu greys it out: move the pawn closer.
+            // If a target is inside minimum firing range, use the game's available melee option.
             new PawnOrder
             {
                 Name = "attack",
@@ -281,6 +280,17 @@ namespace RiMCP.Command
             return target;
         }
 
+        private static bool InsideFiringRangeMinimum(Pawn pawn, LocalTargetInfo target)
+        {
+            Verb verb = pawn.equipment?.PrimaryEq?.PrimaryVerb;
+            if (verb == null || verb.verbProps.IsMeleeAttack)
+            {
+                return false;
+            }
+            float minimum = verb.verbProps.EffectiveMinRange(target, pawn);
+            return pawn.Position.DistanceToSquared(target.Cell) < minimum * minimum;
+        }
+
         private static string Issue(PawnOrder order, Pawn pawn, LocalTargetInfo target, Map map, bool queue, out string reason, out List<Window> opened)
         {
             reason = null;
@@ -296,9 +306,11 @@ namespace RiMCP.Command
             {
                 return "rejected";
             }
-            // The menu lists an order's main option first, such as firing before melee; a disabled
-            // one is refused with its reason rather than swapped for another kind of order.
             FloatMenuOption option = options.FirstOrDefault();
+            if (order.Name == "attack" && option?.Disabled == true && InsideFiringRangeMinimum(pawn, target))
+            {
+                option = options.FirstOrDefault(candidate => !candidate.Disabled) ?? option;
+            }
             if (option == null)
             {
                 reason = order.Target == TargetKind.Cell && target.Cell == pawn.Position

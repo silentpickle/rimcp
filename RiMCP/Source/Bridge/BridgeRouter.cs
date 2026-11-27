@@ -69,6 +69,7 @@ namespace RiMCP.Bridge
             { "set-building-toggles", GizmoService.SetBuildingToggles },
             { "set-target-temperature", TemperatureCommandService.SetTargetTemperature },
             { "use-gizmo", GizmoService.UseGizmo },
+            { "set-stepper", GizmoService.SetStepper },
             { "buildings", BuildingReadService.ListBuildings },
             { "building", BuildingReadService.GetBuilding },
             { "world", QuestWorldReadService.ListWorld },
@@ -77,6 +78,7 @@ namespace RiMCP.Bridge
             { "set-caravan-route", CaravanService.SetRoute },
             { "defs-search", DefReadService.SearchDefs },
             { "def", DefReadService.GetDef },
+            { "info", InfoCardReadService.GetInfo },
             { "set-pawn-drafted", PawnCommandService.SetDrafted },
             { "set-pawn-work-priority", PawnCommandService.SetWorkPriority },
             { "set-work-priorities", PawnCommandService.SetWorkPriorities },
@@ -143,7 +145,8 @@ namespace RiMCP.Bridge
                     pathMatched = true;
                     if (route.MethodMatches(bridgeRequest.Method))
                     {
-                        return Logged(route) ? Recorded(route, bridgeRequest, match) : Dispatch(route, bridgeRequest, match);
+                        bool preview = IsPreview(route, bridgeRequest);
+                        return !preview && Logged(route) ? Recorded(route, bridgeRequest, match) : Dispatch(route, bridgeRequest, match, preview);
                     }
                 }
 
@@ -177,6 +180,35 @@ namespace RiMCP.Bridge
         private static bool Logged(BridgeRoute route)
         {
             return route.Spec.Name != null && !route.MethodMatches("GET") && !Unlogged.Contains(route.Spec.Name);
+        }
+
+        private static readonly HashSet<string> PreviewHandlers = new HashSet<string>
+        {
+            "place-blueprint", "build-roof", "place-floor", "smooth-walls"
+        };
+
+        private static bool IsPreview(BridgeRoute route, BridgeRequest request)
+        {
+            if (!PreviewHandlers.Contains(route.Spec.HandlerId))
+            {
+                return false;
+            }
+            try
+            {
+                return CommandUtil.ReadBody<PreviewBody>(request).Preview;
+            }
+            catch (CommandException)
+            {
+                // Keep malformed submissions on the normal access, hold, and agent-log path.
+                return false;
+            }
+        }
+
+        [DataContract]
+        private sealed class PreviewBody
+        {
+            [DataMember(Name = "preview")]
+            public bool Preview { get; set; }
         }
 
         private static readonly HashSet<string> Unlogged = new HashSet<string> { "find_starting_sites" };
@@ -224,7 +256,7 @@ namespace RiMCP.Bridge
             return unknown.Count == 0 ? null : spec.Name + " has no include section " + string.Join(", ", unknown.ToArray()) + "; it has " + string.Join(", ", sections) + ".";
         }
 
-        private static BridgeResponse Dispatch(BridgeRoute route, BridgeRequest bridgeRequest, RouteMatch match)
+        private static BridgeResponse Dispatch(BridgeRoute route, BridgeRequest bridgeRequest, RouteMatch match, bool preview = false)
         {
             AccessState access = BridgeRuntime.Access;
             if (!access.Enabled)
@@ -253,7 +285,7 @@ namespace RiMCP.Bridge
             }
             if (!route.MethodMatches("GET"))
             {
-                if (GameContext.InMultiplayer)
+                if (!preview && GameContext.InMultiplayer)
                 {
                     return BridgeResponse.Error(409, "RimMCP does not change the game or control time during a Multiplayer session, so every player's game stays in sync. Reads still work.");
                 }
@@ -261,13 +293,13 @@ namespace RiMCP.Bridge
                 // A retry of a request already recorded gets its operation back: while that
                 // operation holds the game, and after it loaded another game. The registry
                 // refuses a requestId reused with other arguments.
-                RequestRecord retried = OperationRunner.FindRequest(guard.RequestId);
+                RequestRecord retried = preview ? null : OperationRunner.FindRequest(guard.RequestId);
                 if (retried != null && retried.Tool != route.Spec.Name)
                 {
                     retried = null;
                 }
                 Operation holding = OperationRunner.ProtectingGame ? OperationRunner.Active : null;
-                if (holding != null && !ChangeWhileHeld.Contains(route.Spec.HandlerId) && (retried == null || retried.OperationId != holding.Id))
+                if (!preview && holding != null && !ChangeWhileHeld.Contains(route.Spec.HandlerId) && (retried == null || retried.OperationId != holding.Id))
                 {
                     return BridgeResponse.Error(409, "Operation " + holding.Id + " (" + holding.Tool + ") saved the colony and is about to replace the game, so the game is held unchanged until then. Check it with get_operation.");
                 }

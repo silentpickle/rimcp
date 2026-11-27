@@ -88,7 +88,8 @@ namespace RiMCP.Command
             }
 
             bool created;
-            AdvanceRun run = AdvanceRunner.Start(hours, speed, stopOn, body.RequestId, out created);
+            AdvanceWatch watch = body.Watch == null ? null : new AdvanceWatch(body.Watch);
+            AdvanceRun run = AdvanceRunner.Start(hours, speed, stopOn, body.RequestId, out created, watch);
             if (created)
             {
                 AgentLog.Done("Running time for " + AdvanceRun.Duration((int)Math.Ceiling(hours * GenDate.TicksPerHour)));
@@ -177,8 +178,9 @@ namespace RiMCP.Command
                 Dto.Field("stopOn", AdvanceRun.Conditions.Where(run.StopOn.Contains).ToArray()),
                 Dto.Field("endReason", running ? null : run.EndReason),
                 Dto.Field("stoppedBy", run.StoppedBy == null ? null : SerializeEvent(run.StoppedBy)),
+                Dto.Field("summary", run.Summary.ToDto()),
                 Dto.Field("events", run.Events.Select(SerializeEvent).ToArray()),
-                Dto.Field("blockedBy", run.EndReason == AdvanceRun.DialogReason ? BlockingWindows.Describe() : null));
+                Dto.Field("blockedBy", !running && run.Previous.Blocking.Count > 0 ? BlockingWindows.Describe() : null));
             if (run.DroppedEvents > 0)
             {
                 dto["droppedEvents"] = run.DroppedEvents;
@@ -201,7 +203,12 @@ namespace RiMCP.Command
                 Dto.Field("pawn", change.PawnId == null ? null : Dto.Obj(
                     Dto.Field("id", change.PawnId),
                     Dto.Field("name", change.PawnName))),
-                Dto.Field("detail", change.Detail));
+                Dto.Field("detail", change.Detail),
+                Dto.Field("construction", change.Construction == null ? null : Dto.Obj(
+                    Dto.Field("mapId", change.Construction.Map.uniqueID.ToString()),
+                    Dto.Field("cell", ReadUtil.Cell(change.Construction.Cell)),
+                    Dto.Field("defName", change.Construction.Def.defName),
+                    Dto.Field("pendingIds", change.Construction.Ids.ToArray()))));
         }
 
         private static TickManager RequireTickManager()
@@ -261,6 +268,9 @@ namespace RiMCP.Command
 
             [DataMember(Name = "speed")]
             public string Speed { get; set; }
+
+            [DataMember(Name = "watch")]
+            public AdvanceWatchBody Watch { get; set; }
 
             [DataMember(Name = "stopOn")]
             public string[] StopOn { get; set; }

@@ -69,6 +69,12 @@ namespace RiMCP.Read
             string defName = route["defName"];
             string kind = context.Request.Get("kind");
 
+            Def def = FindDef(defName, kind);
+            return def == null ? BridgeResponse.Error(404, "Def not found.") : ReadEnvelope.Ok(context, SerializeDef(def, ReadDetail.Full));
+        }
+
+        internal static Def FindDef(string defName, string kind)
+        {
             IEnumerable<DefKind> kinds;
             if (string.IsNullOrWhiteSpace(kind) || IsAllKind(kind))
             {
@@ -79,17 +85,12 @@ namespace RiMCP.Read
                 DefKind resolved;
                 if (!TryResolveKind(kind, out resolved))
                 {
-                    return UnknownKind(kind);
+                    throw new BridgeException(400, UnknownKind(kind).ErrorMessage);
                 }
                 kinds = new[] { resolved };
             }
 
-            Def def = kinds.Select(item => FindNamed(item, defName)).FirstOrDefault(found => found != null);
-            if (def == null)
-            {
-                return BridgeResponse.Error(404, "Def not found.");
-            }
-            return ReadEnvelope.Ok(context, SerializeDef(def, ReadDetail.Full));
+            return kinds.Select(item => FindNamed(item, defName)).FirstOrDefault(found => found != null);
         }
 
         private static bool TryResolveKind(string kind, out DefKind resolved)

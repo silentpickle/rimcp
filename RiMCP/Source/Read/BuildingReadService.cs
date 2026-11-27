@@ -41,7 +41,7 @@ namespace RiMCP.Read
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("category", category),
                 Dto.Field("scope", scope),
-                Dto.Field("buildings", page.Items.Select(building => ReadProjection.Serialize(fields, building, () => SerializeBuilding(building, query.Detail, includeContents && (!whole || building.Faction == Faction.OfPlayer)))).ToArray())),
+                Dto.Field("buildings", page.Items.Select(building => ReadProjection.Serialize(fields, building, () => SerializeBuilding(building, query.Detail, includeContents && (!whole || building.Faction == Faction.OfPlayer), query.Wants("inspectText")))).ToArray())),
                 page.Truncated,
                 page.NextCursor, "buildings");
         }
@@ -54,28 +54,30 @@ namespace RiMCP.Read
             ReadProjection fields = ReadProjection.Parse(context.Request, ReadShape.BuildingFields);
             if (ReadBatch.IsBatch(context.Request, id))
             {
-                return ReadBatch.Reply(context, "buildings", requested => DescribeId(context.Map, requested, fields));
+                return ReadBatch.Reply(context, "buildings", requested => DescribeId(context, requested, fields));
             }
-            object data = DescribeId(context.Map, id, fields);
+            object data = DescribeId(context, id, fields);
             return data == null ? BridgeResponse.Error(404, "Building not found.") : ReadEnvelope.Ok(context, data);
         }
 
-        private static object DescribeId(Map map, string id, ReadProjection fields)
+        private static object DescribeId(ReadContext context, string id, ReadProjection fields)
         {
+            Map map = context.Map;
+            bool inspect = context.Request.Wants("inspectText");
             Building colonyBuilding = FindBuilding(map, id);
             if (colonyBuilding != null)
             {
-                return ReadProjection.Serialize(fields, colonyBuilding, () => DescribeBuilding(colonyBuilding));
+                return ReadProjection.Serialize(fields, colonyBuilding, () => DescribeBuilding(colonyBuilding, inspect));
             }
             Building building = map.listerThings.AllThings.OfType<Building>()
                 .FirstOrDefault(candidate => MatchesId(candidate, id) && SurveyNotable.VisibleBuilding(candidate, map));
             return building == null ? null :
-                ReadProjection.Serialize(fields, building, () => SerializeBuilding(building, ReadDetail.Summary, false));
+                ReadProjection.Serialize(fields, building, () => SerializeBuilding(building, ReadDetail.Summary, false, inspect));
         }
 
-        private static object DescribeBuilding(Building building)
+        private static object DescribeBuilding(Building building, bool inspect)
         {
-            Dictionary<string, object> data = SerializeBuilding(building, ReadDetail.Full, true);
+            Dictionary<string, object> data = SerializeBuilding(building, ReadDetail.Full, true, inspect);
             CompAnimalPenMarker marker = building.TryGetComp<CompAnimalPenMarker>();
             if (marker != null && building.Spawned)
             {
@@ -158,7 +160,7 @@ namespace RiMCP.Read
             return building.def.defName.IndexOf(normalized, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        private static Dictionary<string, object> SerializeBuilding(Building building, ReadDetail detail, bool includeContents)
+        private static Dictionary<string, object> SerializeBuilding(Building building, ReadDetail detail, bool includeContents, bool inspect = false)
         {
             Dictionary<string, object> dto = SummaryDto.ThingWithPosition(building);
             dto["hitPoints"] = building.HitPoints;
@@ -166,6 +168,10 @@ namespace RiMCP.Read
             dto["faction"] = building.Faction == null ? null : building.Faction.Name;
             dto["stuff"] = building.Stuff == null ? null : ReadUtil.Def(building.Stuff);
 
+            if (inspect)
+            {
+                dto["inspectText"] = ReadProjection.InspectText(building);
+            }
             if (detail != ReadDetail.Summary)
             {
                 CompPowerTrader power = building.TryGetComp<CompPowerTrader>();

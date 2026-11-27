@@ -60,10 +60,17 @@ namespace RiMCP.Read
             return row;
         }
 
+        internal static string InspectText(Thing thing)
+        {
+            string text = thing.GetInspectString()?.StripTags().Trim();
+            return string.IsNullOrEmpty(text) ? null : text;
+        }
+
         private static object Value(string field, Thing thing, Func<object> describe, ref Dictionary<string, object> native)
         {
             switch (field)
             {
+                case "inspectText": return InspectText(thing);
                 case "id": return ReadUtil.ThingId(thing);
                 case "def": return thing.def.defName;
                 case "cell": return Dto.Obj(Dto.Field("x", thing.Position.x), Dto.Field("z", thing.Position.z));

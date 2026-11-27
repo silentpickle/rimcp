@@ -44,9 +44,11 @@ namespace RiMCP.Command
         private static object DescribeGizmos(Thing thing, ReadDetail detail)
         {
             List<GizmoEntry> gizmos = Build(thing);
+            object[] steppers = Steppers(thing, gizmos).Select(stepper => stepper.Describe()).ToArray();
             return Dto.Obj(
                 Dto.Field("thing", SummaryDto.Thing(thing)),
                 Dto.Field("revision", Revision(thing, gizmos)),
+                Dto.Field("steppers", steppers.Length == 0 ? null : steppers),
                 Dto.Field("gizmos", gizmos.Select(entry => Describe(thing, entry, detail != ReadDetail.Summary)).ToArray()));
         }
 
@@ -101,7 +103,7 @@ namespace RiMCP.Command
             Require(body);
             CommandContext context = CommandUtil.ContextFor(body.MapId);
             CommandUtil.RequireCurrentMap(context);
-            RequestKey key = RequestKey.For("use_gizmo", requestId, context.Map, route["thingId"], body.Revision, body.Gizmo, body.On, body.TargetId, body.X, body.Z, body.DestinationX, body.DestinationZ);
+            RequestKey key = RequestKey.For("use_gizmo", requestId, context.Map, route["thingId"], body.Revision, body.Gizmo, body.On, body.TargetId, body.X, body.Z, body.DestinationX, body.DestinationZ, body.Times ?? 1);
             return CommandReceipts.Once(context, key, () => Use(context.Map, route["thingId"], body));
         }
 
@@ -109,6 +111,15 @@ namespace RiMCP.Command
         {
             Thing thing = Owner(map, thingId);
             GizmoEntry entry = Find(thing, body);
+            int times = body.Times ?? 1;
+            if (times < 1 || times > GizmoShape.MaxTimes)
+            {
+                throw new CommandException(400, "Field 'times' must be 1 to " + GizmoShape.MaxTimes + ".");
+            }
+            if (times > 1)
+            {
+                return RepeatGizmo(map, thing, entry, body, times);
+            }
             if (Tool(thing, entry) != "use_gizmo")
             {
                 throw new CommandException(409, "'" + Label(entry) + "' is a building setting; set it with set_building_toggle.");
@@ -170,7 +181,66 @@ namespace RiMCP.Command
             {
                 data["job"] = PawnActionService.PawnJob(pawn);
             }
+            if (body.Times.HasValue && thing.Spawned)
+            {
+                data["inspectText"] = GizmoInspectText(thing);
+            }
             return new CommandResult(changed, data);
+        }
+
+        private static CommandResult RepeatGizmo(Map map, Thing thing, GizmoEntry entry, GizmoBody body, int times)
+        {
+            if (!(entry.Command is Command_Action) || body.On.HasValue || body.TargetId != null ||
+                body.X.HasValue || body.Z.HasValue || body.DestinationX.HasValue || body.DestinationZ.HasValue)
+            {
+                throw new CommandException(400, "Only untargeted action buttons can be repeated.");
+            }
+            Press.Check(entry.Origin);
+            string label = Label(entry);
+            var data = Dto.Obj(Dto.Field("thing", SummaryDto.Thing(thing)), Dto.Field("gizmo", label),
+                Dto.Field("origin", entry.Origin.Mod), Dto.Field("requestedPresses", times));
+            AgentLog.About(AgentLog.Name(thing) + ": " + label, thing);
+            int attempted = 0;
+            int completed = 0;
+            IntVec3 cell = thing.Position;
+            while (attempted < times)
+            {
+                attempted++;
+                if (!PressRepeated(data, entry, "use_gizmo", thing, map))
+                {
+                    break;
+                }
+                completed++;
+                if (attempted < times)
+                {
+                    GizmoEntry next = Build(thing).FirstOrDefault(candidate => candidate.Id == entry.Id);
+                    if (next == null || next.Command.Disabled || next.Origin.Unsupported != null ||
+                        next.Origin.Mod != entry.Origin.Mod || next.Origin.Type != entry.Origin.Type ||
+                        !(next.Command is Command_Action action) || action.action?.Method != ((Command_Action)entry.Command).action?.Method ||
+                        Label(next) != label)
+                    {
+                        data["stopped"] = "The button changed or became unavailable.";
+                        break;
+                    }
+                    entry = next;
+                }
+            }
+            data["attemptedPresses"] = attempted;
+            data["completedPresses"] = completed;
+            ReportReplacement(thing, cell, map, label, data);
+            if (thing.Spawned)
+            {
+                data["inspectText"] = GizmoInspectText(thing);
+            }
+            if (completed == times)
+            {
+                Press.Report(data, "Pressed " + label + " " + times + " times", thing);
+            }
+            else
+            {
+                AgentLog.Partly("Pressed " + label, data["stopped"] as string, thing);
+            }
+            return new CommandResult(attempted > 0, data);
         }
 
         private static void Aim(Verse.Command command, LocalTargetInfo target, LocalTargetInfo destination, Map map)
@@ -398,6 +468,9 @@ namespace RiMCP.Command
         {
             [DataMember(Name = "mapId")]
             public string MapId { get; set; }
+
+            [DataMember(Name = "times")]
+            public int? Times { get; set; }
 
             [DataMember(Name = "gizmo")]
             public string Gizmo { get; set; }

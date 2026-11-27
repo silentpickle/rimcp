@@ -59,7 +59,11 @@ namespace RiMCP.Command
             Appeared("lowFood", "low food", Food, observation => observation.LowFood),
             Letter("threatLetter", "a threat letter", threat: true, stopAlias: "letter"),
             new Watcher("caravanRouteEnded", "a caravan route ending", Pawns, EndedCaravans, defaultStop: false),
-            Letter("letter", "a letter", threat: false)
+            Letter("letter", "a letter", threat: false),
+            new Watcher("built", "construction completed", Pawns, Built, defaultStop: false),
+            new Watcher("researchDone", "research completed", Pawns, ResearchDone, defaultStop: false),
+            Pawn("pawnIdle", "a colonist becoming idle", (before, now) => now.Idle && !before.Idle, now => "idle", defaultStop: false),
+            new Watcher("caravanArrived", "a caravan arrival", Pawns, Arrived, defaultStop: false)
         };
 
         private static readonly Source[] Sources = Rows.Select(row => row.Sample).Distinct().OrderBy(source => source.Order).ToArray();
@@ -95,7 +99,7 @@ namespace RiMCP.Command
             return ByKind.TryGetValue(kind, out Watcher row) && row.StopAlias != null && stopOn.Contains(row.StopAlias);
         }
 
-        private static Watcher Pawn(string kind, string summary, Func<ColonistState, ColonistState, bool> changed, Func<ColonistState, string> detail)
+        private static Watcher Pawn(string kind, string summary, Func<ColonistState, ColonistState, bool> changed, Func<ColonistState, string> detail, bool defaultStop = true)
         {
             return new Watcher(kind, summary, Pawns, (before, now, events) =>
             {
@@ -107,7 +111,36 @@ namespace RiMCP.Command
                     }
                     events.Add(new AdvanceEvent { Kind = kind, Tick = now.Tick, PawnId = pawn.Id, PawnName = pawn.Name, Detail = detail(pawn) });
                 }
-            });
+            }, defaultStop);
+        }
+
+        private static void Built(AdvanceObservation before, AdvanceObservation now, List<AdvanceEvent> events)
+        {
+            foreach (BuildWork work in now.Built)
+            {
+                AdvanceEvent change = Event("built", now.Tick, work.Def.defName + " at " + work.Cell.x + "," + work.Cell.z);
+                change.Construction = work;
+                events.Add(change);
+            }
+        }
+
+        private static void ResearchDone(AdvanceObservation before, AdvanceObservation now, List<AdvanceEvent> events)
+        {
+            foreach (ResearchWork work in now.Research.Values)
+            {
+                if (work.Finished && before.Research.TryGetValue(work.Project, out ResearchWork earlier) && !earlier.Finished)
+                {
+                    events.Add(Event("researchDone", now.Tick, work.Project.defName));
+                }
+            }
+        }
+
+        private static void Arrived(AdvanceObservation before, AdvanceObservation now, List<AdvanceEvent> events)
+        {
+            foreach (var caravan in now.Arrivals.OrderBy(pair => pair.Key))
+            {
+                events.Add(Event("caravanArrived", now.Tick, caravan.Value + " (world object " + caravan.Key + ")"));
+            }
         }
 
         private static bool NewInjury(ColonistState before, ColonistState now)

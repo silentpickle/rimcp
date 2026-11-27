@@ -161,6 +161,7 @@ internal static partial class Program
         Test("an include section a tool does not list is refused with the ones it has", CheckIncludeRefusals);
         Test("W1B_watch_priority", CheckAdvanceWatcherPriority);
         Test("W1B_watch_limit", CheckAdvanceWatcherLimit);
+        Test("W2_advance_summary", CheckAdvanceSummary);
         Test("advance runs complete at the target and end on outside changes", () =>
         {
             object game = new object();
@@ -244,7 +245,7 @@ internal static partial class Program
         {
             IEnumerable tools = (IEnumerable)mod.GetType("RiMCP.Shared.ToolManifest", true).GetProperty("McpTools", Static).GetValue(null);
             Dictionary<string, int> counts = tools.Cast<object>().GroupBy(tool => Field<string>(tool, "Group") ?? "(none)").ToDictionary(group => group.Key, group => group.Count());
-            var expected = new Dictionary<string, int> { { "observe", 43 }, { "diagnostics", 4 }, { "time", 2 }, { "administration", 15 }, { "orders", 7 }, { "pawnControl", 5 }, { "decisions", 3 }, { "gameSettings", 1 }, { "gameSetup", 14 } };
+            var expected = new Dictionary<string, int> { { "observe", 44 }, { "diagnostics", 4 }, { "time", 2 }, { "administration", 15 }, { "orders", 7 }, { "pawnControl", 6 }, { "decisions", 3 }, { "gameSettings", 1 }, { "gameSetup", 14 } };
             int count;
             Check(counts.Count == expected.Count && expected.All(pair => counts.TryGetValue(pair.Key, out count) && count == pair.Value),
                 "group sizes: " + string.Join(", ", counts.Select(pair => pair.Key + "=" + pair.Value).ToArray()));
@@ -680,7 +681,7 @@ internal static partial class Program
         Type type = mod.GetType("RiMCP.Command.AdvanceRun", true);
         stopOn = stopOn ?? (string[])type.GetField("DefaultStopOn").GetValue(null);
         int start = Field<int>(baseline, "Tick");
-        return Activator.CreateInstance(type, new object[] { id, requestId, game, TimeSpeed.Superfast, start, start + 100, 1f, stopOn, baseline });
+        return Activator.CreateInstance(type, new object[] { id, requestId, game, TimeSpeed.Superfast, start, start + 100, 1f, stopOn, baseline, null });
     }
 
     private static void CheckAdvanceReceipts()
@@ -696,7 +697,7 @@ internal static partial class Program
         runs.SetValue(first, 0);
         runs.SetValue(second, 1);
         Func<object, string, float, object> receipt = (forGame, requestId, hours) =>
-            find.Invoke(null, new object[] { runs, forGame, requestId, hours, TimeSpeed.Superfast, stopOn });
+            find.Invoke(null, new object[] { runs, forGame, requestId, hours, TimeSpeed.Superfast, stopOn, null });
 
         Check(receipt(game, "first", 1f) == first, "a retry must find a run that is no longer the latest");
         Check(receipt(game, "third", 1f) == null && receipt(game, null, 1f) == null, "new or missing ids must start a run");
@@ -1977,6 +1978,17 @@ internal static partial class Program
             object change = handle.Invoke(null, new[] { Request("/v1/time/speed", "PUT", "{\"speed\":\"Normal\"}") });
             Check(status(change) == 409 && body(change).Contains("held unchanged"), "changes wait while the game is held for a replacement: " + body(change));
             Check(status(handle.Invoke(null, new[] { Request("/v1/research", "GET", null) })) == 200, "reads still answer");
+            foreach (string path in new[] { "/v1/blueprints", "/v1/floors", "/v1/roof/build", "/v1/walls/smooth" })
+            {
+                string logBefore = body(handle.Invoke(null, new[] { Request("/v1/agent-log", "GET", null) }));
+                object preview = handle.Invoke(null, new[] { Request(path, "POST", "{\"preview\":true}") });
+                Check(status(preview) != 200 && !body(preview).Contains("held unchanged"),
+                    "the preview reaches its own map or input validation while held");
+                Check(body(handle.Invoke(null, new[] { Request("/v1/agent-log", "GET", null) })) == logBefore,
+                    "even a refused preview leaves the agent log unchanged");
+                object commit = handle.Invoke(null, new[] { Request(path, "POST", "{\"preview\":false}") });
+                Check(status(commit) == 409 && body(commit).Contains("held unchanged"), "the corresponding order stays held");
+            }
             object stop = handle.Invoke(null, new[] { Request("/v1/operations/" + OperationId(holding) + "/cancel", "POST", "{}") });
             object again = handle.Invoke(null, new[] { Request("/v1/session/load", "POST", "{\"name\":\"x\",\"requestId\":\"held-1\"}") });
             Check(!body(again).Contains("held unchanged"), "a retry of the holding operation is not refused by the hold: " + body(again));

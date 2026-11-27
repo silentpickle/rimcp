@@ -50,7 +50,7 @@ namespace RiMCP.Read
 
             Dictionary<string, object> storages = new Dictionary<string, object>();
             object[] rows = page.Items
-                .Select(thing => query.IdsOnly ? (object)ReadUtil.ThingId(thing) : ReadProjection.Serialize(fields, thing, () => SerializeThing(thing, map, near, query.Detail, storages)))
+                .Select(thing => query.IdsOnly ? (object)ReadUtil.ThingId(thing) : ReadProjection.Serialize(fields, thing, () => SerializeThing(thing, map, near, query.Detail, storages, query.Wants("inspectText"))))
                 .ToArray();
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("summary", Dto.Obj(
@@ -62,7 +62,7 @@ namespace RiMCP.Read
                 page.NextCursor, "things");
         }
 
-        private static object SerializeThing(Thing thing, Map map, IntVec3? near, ReadDetail detail, Dictionary<string, object> storages)
+        private static object SerializeThing(Thing thing, Map map, IntVec3? near, ReadDetail detail, Dictionary<string, object> storages, bool inspect)
         {
             Dictionary<string, object> dto = Dto.Obj(
                 Dto.Field("id", ReadUtil.ThingId(thing)),
@@ -75,6 +75,10 @@ namespace RiMCP.Read
                 // Valid storage accepts the item; an item in storage that no longer accepts it gets hauled away.
                 Dto.Field("inStorage", thing.IsInValidStorage()),
                 Dto.Field("storage", StorageId(thing, map, storages)));
+            if (inspect)
+            {
+                dto["inspectText"] = ReadProjection.InspectText(thing);
+            }
             if (near.HasValue)
             {
                 dto["distance"] = Math.Round(thing.Position.DistanceTo(near.Value), 1);

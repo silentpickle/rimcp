@@ -165,6 +165,10 @@ namespace RiMCP.Read
         public static object SerializePawn(Pawn pawn, string role, ReadDetail detail, ReadRequest request)
         {
             Dictionary<string, object> dto = SummaryDto.Pawn(pawn);
+            if (request.Wants("inspectText"))
+            {
+                dto["inspectText"] = ReadProjection.InspectText(pawn);
+            }
             dto["role"] = role;
             dto["def"] = ReadUtil.Def(pawn.def);
             dto["kindDef"] = pawn.kindDef == null ? null : ReadUtil.Def(pawn.kindDef);

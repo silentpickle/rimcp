@@ -17,6 +17,9 @@ namespace RiMCP.Read
         public const float LowPerColonist = 4f;
 
         public FoodSample Stored;
+        public readonly FoodSample LooseAllowed = new FoodSample();
+        public readonly FoodSample LooseForbidden = new FoodSample();
+        public readonly List<string> ForbiddenIds = new List<string>();
         // At the fed hunger rate. Hungry pawns' current drain is lower, so projecting it would make
         // reserves look longer exactly when pawns are going hungry.
         public float EatenPerDay;
@@ -34,12 +37,14 @@ namespace RiMCP.Read
                 .ToList();
             FoodSummary food = new FoodSummary
             {
-                Stored = FoodSample.Take(map),
+                Stored = new FoodSample { Tick = Find.TickManager.TicksGame },
                 EatenPerDay = eaters.Sum(need => need.FoodFallPerTickAssumingCategory(HungerCategory.Fed, true)) * GenDate.TicksPerDay,
                 DrainNowPerDay = eaters.Sum(need => need.FoodFallPerTick) * GenDate.TicksPerDay
             };
-            foreach (Thing thing in FoodSample.StoredFood(map))
+            var stored = new HashSet<Thing>(FoodSample.StoredFood(map));
+            foreach (Thing thing in stored)
             {
+                food.Stored.Add(thing);
                 CompRottable rottable = thing.TryGetComp<CompRottable>();
                 if (rottable == null || !rottable.Active)
                 {
@@ -54,6 +59,24 @@ namespace RiMCP.Read
                 if (ticks < 3 * GenDate.TicksPerDay)
                 {
                     food.RotsWithinThreeDays += nutrition;
+                }
+            }
+            foreach (Thing held in map.listerThings.ThingsInGroup(ThingRequestGroup.HaulableEver))
+            {
+                if (!held.Spawned || held.Position.Fogged(map))
+                {
+                    continue;
+                }
+                Thing thing = held.GetInnerIfMinified();
+                if (stored.Contains(thing) || !FoodSample.FreshHumanFood(thing))
+                {
+                    continue;
+                }
+                bool forbidden = held.IsForbidden(Faction.OfPlayer);
+                (forbidden ? food.LooseForbidden : food.LooseAllowed).Add(thing);
+                if (forbidden)
+                {
+                    food.ForbiddenIds.Add(ReadUtil.ThingId(held));
                 }
             }
             return food;
@@ -75,10 +98,15 @@ namespace RiMCP.Read
         public object ToDto(Map map)
         {
             return Dto.Obj(
-                Dto.Field("storedNutrition", Dto.Obj(
-                    Dto.Field("meals", Math.Round(Stored.Meals, 1)),
-                    Dto.Field("raw", Math.Round(Stored.Raw, 1)),
-                    Dto.Field("total", Math.Round(Stored.Total, 1)))),
+                Dto.Field("storedNutrition", Stored.ToDto()),
+                Dto.Field("looseAllowedNutrition", LooseAllowed.ToDto()),
+                Dto.Field("looseForbiddenNutrition", LooseForbidden.ToDto()),
+                Dto.Field("unforbid", ForbiddenIds.Count == 0 ? null : Dto.Obj(
+                    Dto.Field("tool", "designate"),
+                    Dto.Field("arguments", Dto.Obj(Dto.Field("kind", "unforbid"),
+                        Dto.Field("mapId", map.uniqueID.ToString()),
+                        Dto.Field("thingIds", ForbiddenIds.Take(10).ToArray()))),
+                    Dto.Field("remainingStacks", Math.Max(0, ForbiddenIds.Count - 10)))),
                 Dto.Field("eatenPerDay", Math.Round(EatenPerDay, 1)),
                 Dto.Field("drainNowPerDay", Math.Round(DrainNowPerDay, 1)),
                 Dto.Field("daysLeft", EatenPerDay <= 0f ? null : (object)Math.Round(Stored.Total / EatenPerDay, 1)),
@@ -109,17 +137,34 @@ namespace RiMCP.Read
             FoodSample sample = new FoodSample { Tick = Find.TickManager.TicksGame };
             foreach (Thing thing in StoredFood(map))
             {
-                float nutrition = thing.def.GetStatValueAbstract(StatDefOf.Nutrition) * thing.stackCount;
-                if (thing.def.ingestible.IsMeal)
-                {
-                    sample.Meals += nutrition;
-                }
-                else
-                {
-                    sample.Raw += nutrition;
-                }
+                sample.Add(thing);
             }
             return sample;
+        }
+
+        public void Add(Thing thing)
+        {
+            float nutrition = thing.def.GetStatValueAbstract(StatDefOf.Nutrition) * thing.stackCount;
+            if (thing.def.ingestible.IsMeal)
+            {
+                Meals += nutrition;
+            }
+            else
+            {
+                Raw += nutrition;
+            }
+        }
+
+        public object ToDto()
+        {
+            return Dto.Obj(Dto.Field("meals", Math.Round(Meals, 1)), Dto.Field("raw", Math.Round(Raw, 1)),
+                Dto.Field("total", Math.Round(Total, 1)));
+        }
+
+        public static bool FreshHumanFood(Thing thing)
+        {
+            return thing.def.CountAsResource && thing.def.IsNutritionGivingIngestible &&
+                thing.def.ingestible.HumanEdible && !thing.IsNotFresh();
         }
 
         // The things ResourceCounter.UpdateResourceCounts counts as human-edible food.
@@ -130,8 +175,7 @@ namespace RiMCP.Read
                 foreach (Thing held in group.HeldThings)
                 {
                     Thing thing = held.GetInnerIfMinified();
-                    if (thing.def.CountAsResource && thing.def.IsNutritionGivingIngestible && thing.def.ingestible.HumanEdible
-                        && !thing.IsNotFresh() && !(thing.SpawnedOrAnyParentSpawned && thing.PositionHeld.Fogged(thing.MapHeld)))
+                    if (FreshHumanFood(thing) && !(thing.SpawnedOrAnyParentSpawned && thing.PositionHeld.Fogged(thing.MapHeld)))
                     {
                         yield return thing;
                     }

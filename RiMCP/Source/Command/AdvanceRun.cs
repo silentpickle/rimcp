@@ -16,6 +16,7 @@ namespace RiMCP.Command
         public string Name;
         public bool Dead;
         public bool Downed;
+        public bool Idle;
         public bool Bleeding;
         public int Injuries;
         public string MentalState;
@@ -39,6 +40,13 @@ namespace RiMCP.Command
         public string Threat;
         // Label of a home map whose stored food is below the Low food threshold, or null.
         public string LowFood;
+        public float StoredFood;
+        public readonly Dictionary<string, BuildWork> Pending = new Dictionary<string, BuildWork>();
+        public readonly List<BuildWork> Built = new List<BuildWork>();
+        public readonly HashSet<ResearchProjectDef> ActiveResearch = new HashSet<ResearchProjectDef>();
+        public readonly Dictionary<ResearchProjectDef, ResearchWork> Research = new Dictionary<ResearchProjectDef, ResearchWork>();
+        public readonly Dictionary<int, CaravanTravel> Traveling = new Dictionary<int, CaravanTravel>();
+        public readonly Dictionary<int, string> Arrivals = new Dictionary<int, string>();
         // Type names of open windows that force a pause (see BlockingWindows); empty when none.
         public readonly List<string> Blocking = new List<string>();
         public readonly Dictionary<string, ColonistState> Colonists = new Dictionary<string, ColonistState>();
@@ -53,6 +61,7 @@ namespace RiMCP.Command
         public string PawnId;
         public string PawnName;
         public string Detail;
+        public BuildWork Construction;
     }
 
     // One advance_time request. Step only compares observations, so the lifecycle can be tested
@@ -73,6 +82,8 @@ namespace RiMCP.Command
         public readonly int TargetTick;
         public readonly float Hours;
         public readonly HashSet<string> StopOn;
+        public readonly AdvanceWatch Watch;
+        public readonly AdvanceSummary Summary;
         public readonly List<AdvanceEvent> Events = new List<AdvanceEvent>();
         public readonly ManualResetEventSlim Ended = new ManualResetEventSlim(false);
         public int DroppedEvents;
@@ -87,7 +98,7 @@ namespace RiMCP.Command
         public bool Failed;
         public bool Revoked;
 
-        public AdvanceRun(int id, string requestId, object game, TimeSpeed speed, int startTick, int targetTick, float hours, IEnumerable<string> stopOn, AdvanceObservation baseline)
+        public AdvanceRun(int id, string requestId, object game, TimeSpeed speed, int startTick, int targetTick, float hours, IEnumerable<string> stopOn, AdvanceObservation baseline, AdvanceWatch watch = null)
         {
             Id = id;
             RequestId = requestId;
@@ -98,6 +109,8 @@ namespace RiMCP.Command
             Hours = hours;
             StopOn = new HashSet<string>(stopOn);
             Previous = baseline;
+            Watch = watch;
+            Summary = new AdvanceSummary(baseline);
         }
 
         public void Step(AdvanceObservation current)
@@ -112,6 +125,7 @@ namespace RiMCP.Command
                 return;
             }
 
+            Summary.Observe(Previous, current);
             List<AdvanceEvent> changes = AdvanceWatchers.Detect(Previous, current);
             foreach (AdvanceEvent change in changes)
             {
@@ -143,9 +157,9 @@ namespace RiMCP.Command
             }
         }
 
-        public bool SameRequest(float hours, TimeSpeed speed, ICollection<string> stopOn)
+        public bool SameRequest(float hours, TimeSpeed speed, ICollection<string> stopOn, AdvanceWatch watch = null)
         {
-            return Hours == hours && Speed == speed && StopOn.SetEquals(stopOn);
+            return AdvanceWatch.Equivalent(Watch, watch) && Hours == hours && Speed == speed && StopOn.SetEquals(stopOn);
         }
 
         public void RecordFrame(double milliseconds)
@@ -220,11 +234,13 @@ namespace RiMCP.Command
 
         private bool StopsRun(AdvanceEvent change)
         {
-            return StopOn.Contains(change.Kind) || AdvanceWatchers.MatchesAlias(change.Kind, StopOn);
+            return (change.Construction == null || Watch == null || Watch.Matches(change.Construction)) &&
+                (StopOn.Contains(change.Kind) || AdvanceWatchers.MatchesAlias(change.Kind, StopOn));
         }
 
         private void Record(AdvanceEvent change)
         {
+            Summary.Record(change);
             if (Events.Count >= MaxEvents)
             {
                 DroppedEvents++;
@@ -252,6 +268,8 @@ namespace RiMCP.Command
         private const int FoodCheckInterval = GenTicks.TickRareInterval;
         private static int foodCheckedTick = int.MinValue;
         private static string lowFood;
+        private static float storedFood;
+        private static AdvanceObservation lastCapture;
         private static List<Pawn> held = new List<Pawn>();
 
         // Replaceable so tests can simulate an observation failure.
@@ -278,10 +296,10 @@ namespace RiMCP.Command
             return history.FirstOrDefault(run => run.Id == id && ReferenceEquals(run.Game, Current.Game));
         }
 
-        public static AdvanceRun Start(float hours, TimeSpeed speed, ICollection<string> stopOn, string requestId, out bool created)
+        public static AdvanceRun Start(float hours, TimeSpeed speed, ICollection<string> stopOn, string requestId, out bool created, AdvanceWatch watch = null)
         {
             history.RemoveAll(run => !ReferenceEquals(run.Game, Current.Game));
-            AdvanceRun receipt = FindReceipt(history, Current.Game, requestId, hours, speed, stopOn);
+            AdvanceRun receipt = FindReceipt(history, Current.Game, requestId, hours, speed, stopOn, watch);
             if (receipt != null)
             {
                 created = false;
@@ -296,6 +314,7 @@ namespace RiMCP.Command
             tracked = new List<Pawn>();
             held = new List<Pawn>();
             foodCheckedTick = int.MinValue;
+            lastCapture = null;
             AdvanceObservation baseline = Observe();
             TickManager ticks = Find.TickManager;
             ticks.CurTimeSpeed = speed;
@@ -305,7 +324,7 @@ namespace RiMCP.Command
             }
 
             int duration = (int)Math.Ceiling(hours * GenDate.TicksPerHour);
-            AdvanceRun run = new AdvanceRun(++nextId, requestId, Current.Game, speed, baseline.Tick, baseline.Tick + duration, hours, stopOn, baseline);
+            AdvanceRun run = new AdvanceRun(++nextId, requestId, Current.Game, speed, baseline.Tick, baseline.Tick + duration, hours, stopOn, baseline, watch);
             history.Add(run);
             if (history.Count > MaxHistory)
             {
@@ -317,14 +336,14 @@ namespace RiMCP.Command
         }
 
         // A repeated requestId returns its run; the same id with different arguments is a client error.
-        public static AdvanceRun FindReceipt(IEnumerable<AdvanceRun> runs, object game, string requestId, float hours, TimeSpeed speed, ICollection<string> stopOn)
+        public static AdvanceRun FindReceipt(IEnumerable<AdvanceRun> runs, object game, string requestId, float hours, TimeSpeed speed, ICollection<string> stopOn, AdvanceWatch watch = null)
         {
             if (requestId == null)
             {
                 return null;
             }
             AdvanceRun run = runs.LastOrDefault(item => item.RequestId == requestId && ReferenceEquals(item.Game, game));
-            if (run != null && !run.SameRequest(hours, speed, stopOn))
+            if (run != null && !run.SameRequest(hours, speed, stopOn, watch))
             {
                 throw new CommandException(409, "requestId '" + requestId + "' was already used for run " + run.Id + " with different arguments.");
             }
@@ -381,6 +400,7 @@ namespace RiMCP.Command
                 latest = null;
                 tracked = new List<Pawn>();
                 held = new List<Pawn>();
+                lastCapture = null;
             }
         }
 
@@ -407,15 +427,33 @@ namespace RiMCP.Command
                 return;
             }
 
-            if (run.PausesGameAtEnd && Current.Game != null && ReferenceEquals(Current.Game, run.Game))
+            try
             {
-                Find.TickManager.Pause();
+                if (Current.Game == null || !ReferenceEquals(Current.Game, run.Game))
+                {
+                    return;
+                }
+                if (run.PausesGameAtEnd)
+                {
+                    Find.TickManager.Pause();
+                }
+                if (!run.Failed)
+                {
+                    run.Summary.FinishFood(TotalStoredFood());
+                    if (run.Previous.Blocking.Count > 0)
+                    {
+                        BlockingWindows.Adopt();
+                    }
+                }
             }
-            if (run.EndReason == AdvanceRun.DialogReason)
+            catch (Exception ex)
             {
-                BlockingWindows.Adopt();
+                RiMCP.Bridge.BridgeRouter.LogFailure(ex);
             }
-            run.Ended.Set();
+            finally
+            {
+                run.Ended.Set();
+            }
         }
 
         private static AdvanceObservation Observe()
@@ -434,6 +472,8 @@ namespace RiMCP.Command
             observation.Speed = Find.TickManager.CurTimeSpeed;
             observation.Blocking.AddRange(BlockingWindows.Names());
             AdvanceWatchers.Capture(observation);
+            AdvanceWork.Capture(observation, lastCapture);
+            lastCapture = observation;
             return observation;
         }
 
@@ -455,11 +495,28 @@ namespace RiMCP.Command
             if (observation.Tick < foodCheckedTick || observation.Tick >= foodCheckedTick + FoodCheckInterval)
             {
                 foodCheckedTick = observation.Tick;
-                Map low = Find.Maps.FirstOrDefault(FoodSummary.IsLow);
+                Map low = null;
+                storedFood = 0f;
+                foreach (Map home in Find.Maps.Where(map => map.IsPlayerHome))
+                {
+                    float nutrition = FoodSample.Take(home).Total;
+                    storedFood += nutrition;
+                    if (low == null && home.mapPawns.AnyColonistSpawned &&
+                        nutrition < FoodSummary.LowPerColonist * home.mapPawns.FreeColonistsSpawnedCount)
+                    {
+                        low = home;
+                    }
+                }
                 lowFood = low == null ? null : "stored food on " + (low.Parent == null ? "map " + low.uniqueID : low.Parent.LabelCap) + " is below " + FoodSummary.LowPerColonist + " nutrition per colonist";
                 held = Find.Maps.SelectMany(map => map.mapPawns.FreeColonists).Where(pawn => !pawn.Spawned).ToList();
             }
             observation.LowFood = lowFood;
+            observation.StoredFood = storedFood;
+        }
+
+        private static float TotalStoredFood()
+        {
+            return Find.Maps.Where(map => map.IsPlayerHome).Sum(map => FoodSample.Take(map).Total);
         }
 
         internal static void CapturePawnsAndCaravans(AdvanceObservation observation)
@@ -471,6 +528,7 @@ namespace RiMCP.Command
             foreach (var caravan in caravans.Where(each => each.pather.Moving))
             {
                 observation.MovingCaravans[caravan.ID] = caravan.LabelCap.StripTags();
+                observation.Traveling[caravan.ID] = new CaravanTravel(caravan);
             }
             IEnumerable<Pawn> travelers = caravans.SelectMany(caravan => caravan.PawnsListForReading).Where(pawn => pawn.IsFreeColonist);
             pawns.AddRange(held.Concat(travelers).Concat(tracked.Where(pawn => pawn.Dead || pawn.MapHeld != null)).Distinct().Where(pawn => !pawns.Contains(pawn)).ToList());
@@ -520,6 +578,7 @@ namespace RiMCP.Command
                 return state;
             }
             state.Downed = pawn.Downed;
+            state.Idle = pawn.Spawned && !pawn.Downed && !pawn.Drafted && pawn.mindState?.IsIdle == true;
             state.Bleeding = pawn.health.hediffSet.BleedRateTotal > 0f;
             // Fresh injuries only: scars are permanent, and diseases needing re-tending are not new harm.
             state.Injuries = pawn.health.hediffSet.hediffs.Count(hediff => hediff is Hediff_Injury && !hediff.IsPermanent());

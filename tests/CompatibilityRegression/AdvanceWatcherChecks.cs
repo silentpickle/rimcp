@@ -74,6 +74,27 @@ internal static partial class Program
         Field<IDictionary>(observation, "MovingCaravans")[id] = label;
     }
 
+    private static void CheckAdvanceSummary()
+    {
+        object game = new object();
+        object before = Observation(game, WatchStart, TimeSpeed.Superfast, colonists: new[] { Colonist("builder") });
+        before.GetType().GetField("StoredFood").SetValue(before, 21f);
+        object run = AdvanceRun(game, before, new[] { "pawnIdle" });
+
+        object current = Observation(game, WatchFirstFrame, TimeSpeed.Superfast,
+            colonists: new[] { New("ColonistState", "Id", "builder", "Idle", true) },
+            letters: Enumerable.Range(1, AdvanceEventLimit + 1).Select(id => Letter(id, "Letter " + id, false)).ToArray());
+        current.GetType().GetField("StoredFood").SetValue(current, 18.5f);
+        Step(run, current);
+
+        Check(Field<string>(run, "EndReason") == "pawnIdle", "idle stops even when the event timeline is full");
+        Check(Field<int>(run, "DroppedEvents") == 2, "the last letter and the idle event were omitted");
+        object summary = Field<object>(run, "Summary");
+        var dto = (IDictionary)summary.GetType().GetMethod("ToDto").Invoke(summary, null);
+        Check((int)dto["newLetters"] == AdvanceEventLimit + 1 && (int)dto["colonistsBecameIdle"] == 1 &&
+            (double)dto["storedNutritionChange"] == -2.5, "the run summary keeps totals independently from the bounded timeline");
+    }
+
     private static void CheckAdvanceWatcherLimit()
     {
         object game = new object();

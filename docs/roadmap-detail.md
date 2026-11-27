@@ -15,7 +15,8 @@ Record each package's status, commit and date here. Keep the verification eviden
 - Implemented and verified November 26 in `d031382`: **W1.C** layer registry, scale, and counts. Baseline commit `d981111`.
 - Implemented and verified November 26 in `c4d74b9`: **W2.4** thin whole-map survey and named tiles.
 - Implemented and verified November 26 in `65188cd`: **W2.5** mover groups and **W2.6** notable things and map-wide building reads.
-- **W2.2 advance run summaries** is the next dependency for the turn digest.
+- Implemented November 27 through **W2.13**, including the advance summary and new stops. Verified the adopted research-complete dialog in the running game. [Wave 2 workflow and checks](wave-2-workflow.md)
+- **W2.14** and **W2.15** are the remaining Wave 2 packages. The watcher and survey dependencies for **W3.1** are in place.
 
 ## Critical path
 

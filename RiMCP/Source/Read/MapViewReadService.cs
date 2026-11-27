@@ -43,10 +43,17 @@ namespace RiMCP.Read
             ReadRequest query = context.Request;
             Map map = context.Map;
             int scale = Scale(query);
-            bool countsOnly = CountsOnly(query);
+            string projection = Projection(query);
+            bool countsOnly = projection == MapViewShape.Counts;
+            bool cellsOnly = projection == MapViewShape.Cells;
             string tile = query.Get("tile");
-            CellRect bounds = tile == null ? Bounds(query, map, scale, countsOnly) : SurveyTiles.Resolve(query, map.Size);
+            CellRect bounds = tile == null ? Bounds(query, map, scale, countsOnly, cellsOnly) : SurveyTiles.Resolve(query, map.Size);
             MapLayer[] layers = MapLayerRegistry.Select(query.List("layers")).ToArray();
+
+            if (cellsOnly)
+            {
+                return ReadCells(context, bounds, layers, scale);
+            }
 
             var meanings = new Dictionary<char, string>();
             Dictionary<IntVec3, char> pawns = PawnSymbols(map, bounds, meanings);
@@ -72,15 +79,41 @@ namespace RiMCP.Read
                 Dto.Field("layers", layerDtos.Count == 0 ? null : layerDtos)));
         }
 
+        private static BridgeResponse ReadCells(ReadContext context, CellRect bounds, MapLayer[] layers, int scale)
+        {
+            if (scale != 1 || bounds.Width * bounds.Height > MapViewShape.MaxDetailedCells || layers.Length == 0)
+            {
+                throw new BridgeException(400, "Cell reads need scale 1, one or more layers, and at most " +
+                    MapViewShape.MaxDetailedCells + " cells. Use a rectangle instead of a survey tile.");
+            }
+            var cells = bounds.Select(cell =>
+            {
+                var row = Dto.Obj(Dto.Field("x", cell.x), Dto.Field("z", cell.z));
+                if (cell.Fogged(context.Map))
+                {
+                    row["unexplored"] = true;
+                }
+                else
+                {
+                    foreach (MapLayer layer in layers)
+                    {
+                        row[layer.Name] = layer.Value(cell, context.Map);
+                    }
+                }
+                return row;
+            }).ToArray();
+            return ReadEnvelope.Ok(context, Dto.Obj(Dto.Field("cells", cells)));
+        }
+
         private static MapLayerProjection ReadLayer(Map map, CellRect bounds, int scale, bool countsOnly, Func<IntVec3, char> sample)
         {
             return MapLayerProjection.Read(bounds, scale, countsOnly, cell => cell.Fogged(map) ? MapLayerProjection.Unexplored : sample(cell));
         }
 
-        private static CellRect Bounds(ReadRequest query, Map map, int scale, bool countsOnly)
+        private static CellRect Bounds(ReadRequest query, Map map, int scale, bool countsOnly, bool cellsOnly)
         {
             int limit = countsOnly ? MapViewShape.MaxCellSpan : GridCellLimit(scale);
-            int fallback = Math.Min(MapViewShape.DefaultGridSize * scale, limit);
+            int fallback = cellsOnly ? 1 : Math.Min(MapViewShape.DefaultGridSize * scale, limit);
             int width = Math.Min(Size(query, "width", fallback, limit), map.Size.x);
             int height = Math.Min(Size(query, "height", fallback, limit), map.Size.z);
             IntVec3 centre = ColonistCentre(map);
@@ -100,18 +133,14 @@ namespace RiMCP.Read
             return Size(request, "scale", 1, MapViewShape.MaxScale);
         }
 
-        private static bool CountsOnly(ReadRequest request)
+        private static string Projection(ReadRequest request)
         {
-            string projection = request.Get("as");
-            if (projection == null || string.Equals(projection, MapViewShape.Grid, StringComparison.OrdinalIgnoreCase))
+            string projection = request.Get("as")?.ToLowerInvariant() ?? MapViewShape.Grid;
+            if (projection != MapViewShape.Grid && projection != MapViewShape.Counts && projection != MapViewShape.Cells)
             {
-                return false;
+                throw new BridgeException(400, "Field 'as' must be grid, counts, or cells.");
             }
-            if (string.Equals(projection, MapViewShape.Counts, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-            throw new BridgeException(400, "Field 'as' must be grid or counts.");
+            return projection;
         }
 
         private static int Size(ReadRequest query, string field, int fallback, int limit)
