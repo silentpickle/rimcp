@@ -14,7 +14,9 @@ The [detailed fork roadmap](roadmap-detail.md) tracks package order, dependencie
 | W1.C and W2.4. Map layers and thin survey | See a whole-map overview, zoom to a named tile, and use exact symbol counts and roof or designation overlays when planning. | `d031382`, `c4d74b9` |
 | W2.5–W2.6. Movers and notable things | Find visible parties, wildlife, landmarks and ore, then inspect an actual thing ID or narrow a map-wide building read. | `65188cd` |
 
-Wave 2 now covers **W2.1–W2.13**. Advances have scoped stop conditions and a run summary. Map cells expose ground, use, and thing layers. Inspect text, info cards, and generic button controls help diagnose and operate unfamiliar things. The batch also adds loose-food totals, the native minimum-range melee fallback, readable previews during holds, and a live research-complete dialog check. [Wave 2 workflow and verification](wave-2-workflow.md)
+Wave 2 is complete through **W2.15**. Advances have scoped stop conditions and a run summary. Map cells expose ground, use, and thing layers. Inspect text, info cards, and generic button controls help diagnose and operate unfamiliar things. The batch also adds loose-food totals, the native minimum-range melee fallback, readable previews during holds, a live research-complete dialog check, native Ideology rituals, and a read-only scenario preview. [Wave 2 workflow and verification](wave-2-workflow.md)
+
+Wave 3 starts with **W3.1**. The turn digest combines immediate map risks, movers, food, letters, and advance outcomes in one bounded read. Survey and list revisions let a caller follow changes to the same view. [Wave 3 workflow](wave-3-workflow.md)
 
 The survey disposable-save checks measured a **3,453-byte** overview with movers and notable things. A 17-member trade party appeared as one group, and a surveyed component vein opened through `get_building`. The hostile fields were exercised with a synthetic hostile trader checkpoint. A live raid stage still needs verification. [Survey workflow and checks](survey-workflow.md)
 

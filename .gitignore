@@ -26,3 +26,4 @@ RiMCP/Tools/McpProxy/*
 *.log
 *.tmp
 *.temp
+__pycache__

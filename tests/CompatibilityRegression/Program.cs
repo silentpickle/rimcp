@@ -245,7 +245,7 @@ internal static partial class Program
         {
             IEnumerable tools = (IEnumerable)mod.GetType("RiMCP.Shared.ToolManifest", true).GetProperty("McpTools", Static).GetValue(null);
             Dictionary<string, int> counts = tools.Cast<object>().GroupBy(tool => Field<string>(tool, "Group") ?? "(none)").ToDictionary(group => group.Key, group => group.Count());
-            var expected = new Dictionary<string, int> { { "observe", 44 }, { "diagnostics", 4 }, { "time", 2 }, { "administration", 15 }, { "orders", 7 }, { "pawnControl", 6 }, { "decisions", 3 }, { "gameSettings", 1 }, { "gameSetup", 14 } };
+            var expected = new Dictionary<string, int> { { "observe", 47 }, { "diagnostics", 4 }, { "time", 2 }, { "administration", 16 }, { "orders", 7 }, { "pawnControl", 6 }, { "decisions", 3 }, { "gameSettings", 1 }, { "gameSetup", 14 } };
             int count;
             Check(counts.Count == expected.Count && expected.All(pair => counts.TryGetValue(pair.Key, out count) && count == pair.Value),
                 "group sizes: " + string.Join(", ", counts.Select(pair => pair.Key + "=" + pair.Value).ToArray()));
@@ -412,6 +412,7 @@ internal static partial class Program
         Test("L2_page_cursor", CheckPageReplyBudget);
         Test("L2_oversized_row", CheckNestedReplyBudget);
         Test("L2_byte_boundary", CheckExactReplyBudget);
+        Test("L4 revisions address projected rows and reset across loads, selectors and byte limits", CheckReadRevisions);
         Console.WriteLine(passed + " passed; " + failed + " failed.");
         return failed == 0 ? 0 : 1;
     }
@@ -486,6 +487,42 @@ internal static partial class Program
         var budget = (Dictionary<string, object>)capped["budget"];
         Check((bool)capped["truncated"] && !Data(capped).ContainsKey("value"), "omit a section one byte over the limit");
         Check(Rows(budget["omittedFields"]).Cast<string>().SequenceEqual(new[] { "value" }), "name the omitted section");
+    }
+
+    private static void CheckReadRevisions()
+    {
+        string Read(string load, string query, string[] ids, string[] rows)
+        {
+            var data = new Dictionary<string, object> { { "pawns", rows } };
+            var envelope = new Dictionary<string, object>
+            {
+                { "data", data }, { "truncated", false }, { "loadId", load }, { "mapId", "2" }
+            };
+            var uri = new Uri("http://localhost/v1/pawns?" + query);
+            object request = Invoke("RiMCP.Read.ReadRequest", "FromUri", uri);
+            return (string)Invoke("RiMCP.Read.ReadRevisions", "TrySerialize", request, envelope, "pawns", data, "pawns", ids);
+        }
+
+        var before = Json.Deserialize<Dictionary<string, object>>(Read("revision-a", "trackRevision=true&fields=name",
+            new[] { "A", "B" }, new[] { "A's name", "B's name" }));
+        string token = (string)before["revision"];
+        Check(Rows(before["rowIds"]).Cast<string>().SequenceEqual(new[] { "A", "B" }), "a projection without ids still names its rows");
+        var changed = Json.Deserialize<Dictionary<string, object>>(Read("revision-a", "since=" + token + "&fields=name",
+            new[] { "C", "A" }, new[] { "C's name", "new name" }));
+        var delta = (Dictionary<string, object>)changed["listDelta"];
+        Check((bool)changed["delta"] && Rows(delta["removed"]).Cast<string>().SequenceEqual(new[] { "B" }), "report a removed row");
+        Check(Rows(delta["upsert"]).Cast<Dictionary<string, object>>().Select(row => row["id"].ToString()).SequenceEqual(new[] { "C", "A" }), "upsert new and changed rows");
+        Check(Rows(delta["order"]).Cast<string>().SequenceEqual(new[] { "C", "A" }), "report changed order");
+
+        var wrongSelector = Json.Deserialize<Dictionary<string, object>>(Read("revision-a", "since=" + token + "&fields=id",
+            new[] { "A" }, new[] { "A" }));
+        Check((bool)wrongSelector["reset"] && !wrongSelector.ContainsKey("delta"), "a different selector starts a full snapshot");
+        string capped = Read("revision-a", "since=" + token + "&fields=name&maxBytes=1024",
+            new[] { "A" }, new[] { new string('x', 2000) });
+        Check(capped == null, "an incomplete payload must not earn a revision");
+        var otherLoad = Json.Deserialize<Dictionary<string, object>>(Read("revision-b", "since=" + token + "&fields=name",
+            new[] { "A" }, new[] { "A's name" }));
+        Check((bool)otherLoad["reset"] && !otherLoad.ContainsKey("delta"), "a revision from another load starts over");
     }
 
     private static string BudgetedReply(Dictionary<string, object> source, int maxBytes, string field = null)

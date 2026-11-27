@@ -26,7 +26,7 @@ namespace RiMCP.Read
                     .ToArray()),
                 Dto.Field("pawns", page.Items.Select(role => SerializeWorkPawn(role.Pawn, role.Role, context.Request)).ToArray())),
                 page.Truncated,
-                page.NextCursor, "pawns");
+                page.NextCursor, "pawns", revisionScope: "work", rowIds: page.Items.Select(role => ReadUtil.ThingId(role.Pawn)));
         }
 
         private static object SerializeWorkPawn(Pawn pawn, string role, ReadRequest request)

@@ -41,15 +41,32 @@ Thing layers give IDs, temperatures are in Celsius, and fogged cells return only
 - Check the three nutrition buckets in `get_colony_status`. When loose food is forbidden, `food.unforbid` gives a `designate` call for the first batch. Reread the colony after applying it.
 - Use `preview: true` with `place_blueprint`, `place_floor`, `build_roof`, or `smooth_walls` to preview under the existing tool permissions. Previews leave the agent log alone and work during a game hold while the map remains readable.
 
+## Preview and start an Ideology ritual
+
+1. Get the ideoligion ID from `list_ideoligions`. Call `get_ideoligion` with that ID and `view: "rituals"` to read the role holders, ritual precepts, and active rituals on the selected map.
+2. Call `preview_ritual` with a ritual precept ID and a visible `targetId` or both `x` and `z`. The game checks what location each ritual accepts. For role change, give the colonist's `pawnId` and the destination role precept's `roleId`. Use `roleId: "none"` to remove the current role.
+3. Read `blockers`, the cast, and any role-change warning. To choose the cast, give `rolePawns` as entries such as `"speaker=Human285"` using the preview's ritual slot IDs. Use `spectatorIds` to choose a spectator list. Omit either selection for the game's defaults.
+4. When the preview is ready, pass the same arguments to `start_ritual` with a fresh `requestId` and the current `expectedLoadId`. A successful start returns an `activeId` that appears in the ideoligion's rituals view. After advancing time, reread the role holders to see whether the ceremony succeeded.
+
+This entry point uses the standard player Ideology ritual flow. Royalty ceremonies, Anomaly rituals, and rituals with a separate start flow have their own controls.
+
+## Preview a new-game scenario
+
+Run `list_scenarios`, then `preview_scenario` with the exact name and, when needed, its category. The preview lists starting human pawn counts and choices, declared supplies and where they appear, declared animals and mechs, arrival method, and any manual setup screens. A random animal entry describes a game roll. Mod parts can add gear or effects beyond the standard declarations. The preview works before setup and while a colony is loaded.
+
 ## Verify a build
 
 1. Run `scripts/check-rimcp.sh` against RimWorld 1.6 managed assemblies. Rebuild the proxy as well as the DLL. On a disposable copy, verify both via `tools/list` and `get_game_context`.
 2. On the furnished-room checkpoint, use a map-cell read at the cooler, compare its ID with `get_building`, and query `get_info` for Power. Inspect its stepper and change the target by one large and one small step. Confirm the displayed value and replay the request ID. Use the food unforbid hint and confirm the nutrition moves from forbidden to allowed.
 3. Place construction blueprints and advance with `stopOn: ["built"]` and a scoped `watch`. Compare the returned construction and the cell's new building ID. The compatibility harness checks previews while a held operation blocks matching placement orders.
 4. On a copied save with an active project near completion, run once with `stopOn: []` and once with `stopOn: ["researchDone"]` from the original copy. Use the native `OK` option through `answer_dialog`, then verify the clock can advance again. A 1.6.4871 trial used Solar Panels at 599.99 of 600 points and let a colonist finish it at a normal research bench.
+5. On a disposable Ideology save, preview a role change at an ideogram, try an invalid target or cast, then launch the valid cast. Replay the same request ID and compare the active ID. Advance until the role holder changes, then preview and start a leader speech.
+6. At the main menu, preview Crashlanded and Naked Brutality. Compare their reported starting counts and supplies. Repeat a preview while a disposable colony is paused and compare the game context before and after.
 
 ## Recorded results
 
 The November 27 trial used disposable RimWorld 1.6.4871 saves with the rebuilt bridge and proxy. A scoped stool blueprint stopped the advance after it became a building. The summary retained its completion and the new letter. An idle stop beyond the event limit and preview access during a held operation were exercised in the compatibility harness.
 
 Live calls also verified exact cells and fog masking, a cooler's info-card explanation, a two-click Fahrenheit stepper, repeated actions, the food unforbid hint, and close-range melee selection with a native minimum-range weapon. The four previews left the agent log unchanged. The research dialog adopted and answered successfully both with and without the explicit research stop. After each answer the next advance moved the clock. A live caravan arrival remains to be checked.
+
+The copied Benevolina save verified role-change blockers, an exact retry, active ceremony readback, and the leader role taking effect after the ceremony. The new leader then started a speech with a selected cast, and an overlapping start was blocked. Main-menu scenario previews reported three of eight candidates and declared supplies for Crashlanded, and one pawn with an empty supply list for Naked Brutality. With the colony loaded, the same Crashlanded preview left the clock unchanged.

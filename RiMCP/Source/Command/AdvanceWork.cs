@@ -246,11 +246,13 @@ namespace RiMCP.Command
 
         public void FinishFood(float nutrition) => endFood = nutrition;
 
-        public object ToDto()
+        public object ToDto() => Describe(researchLimit: 5);
+
+        internal object Describe(int researchLimit)
         {
             return Dto.Obj(
                 Dto.Field("blueprintsCompleted", blueprints),
-                Dto.Field("research", research.Take(5).Select(pair => Dto.Obj(
+                Dto.Field("research", research.Take(researchLimit).Select(pair => Dto.Obj(
                     Dto.Field("defName", pair.Key),
                     Dto.Field("progressBefore", Math.Round(pair.Value.Start, 3)),
                     Dto.Field("progressAfter", Math.Round(pair.Value.End, 3)),

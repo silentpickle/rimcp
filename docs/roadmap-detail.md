@@ -16,7 +16,8 @@ Record each package's status, commit and date here. Keep the verification eviden
 - Implemented and verified November 26 in `c4d74b9`: **W2.4** thin whole-map survey and named tiles.
 - Implemented and verified November 26 in `65188cd`: **W2.5** mover groups and **W2.6** notable things and map-wide building reads.
 - Implemented November 27 through **W2.13**, including the advance summary and new stops. Verified the adopted research-complete dialog in the running game. [Wave 2 workflow and checks](wave-2-workflow.md)
-- **W2.14** and **W2.15** are the remaining Wave 2 packages. The watcher and survey dependencies for **W3.1** are in place.
+- Completed Wave 2 on November 27 in the local working tree. **W2.14** starts Ideology rituals and handles roles through the native ceremony. **W2.15** previews scenarios before setup. [Wave 2 workflow and checks](wave-2-workflow.md)
+- **W3.1** adds the turn digest and revisioned survey and list reads. **W3.2** will use the digest in the run-between-turns workflow. [Wave 3 workflow](wave-3-workflow.md)
 
 ## Critical path
 
@@ -107,14 +108,14 @@ Each package can proceed once its dependencies are available.
 | W2.11 | **E9 melee fallback** for `order_pawn attack` | 2 | M | – | `PawnOrderCommandService.cs` |
 | W2.12 | **E11 previews on the read path,** out of the agent log | 2 | M | – | `BridgeRouter.cs`, `BuildService.cs`, `SurfacePlanService.cs` |
 | W2.13 | **G1 live check** of `answer_dialog` on an adopted research-complete dialog. A check, and a fix if it fails. | 1 | M | – | `BlockingWindows.cs`, `Interactions.cs` |
-| W2.14 | **G4 Ideology roles and rituals** without the ritual window | 4 | H | – | New command service, `IdeoEditor.cs` |
+| W2.14 | **G4 Ideology roles and rituals** without the ritual window | 4 | H | – | `RitualCommandService.cs`, `IdeoligionReadService.cs` |
 | W2.15 | **G6 scenario preview** before setup | 2 | L | – | `SetupCommandService*.cs` |
 
 ### Wave 3 · Compose the workflows
 
 | Pkg | Item | Grade | Risk | Depends | Main files |
 | --- | --- | --- | --- | --- | --- |
-| W3.1 | **L4 turn digest and deltas:** one read of 2 KB or less per cycle, plus `revision` and `since` on survey parts and lists | 4 | M | W2.2, W2.5, W1.A | New `DigestReadService.cs`, `ReadCommon.cs` revisions |
+| W3.1 | **L4 turn digest and deltas:** one read of 2 KB or less per cycle, plus `revision` and `since` on survey parts and lists | 4 | M | W2.2, W2.5, W1.A | `DigestReadService.cs`, `ReadRevisions.cs` |
 | W3.2 | **L3 run between turns:** an `advance_time` mode that keeps the game at speed and pauses only when a watcher fires; reads and orders while running | 4 | M | W2.1, W3.1 | `AdvanceRun.cs`, `TimeCommandService.cs`, proxy waits |
 | W3.3 | **D4 effect capture, spike:** do `DrawGhost` and `DrawExtraSelectionOverlays` run safely from the bridge's main-thread dispatcher, with Harmony prefixes on `GenDraw`? | 5 | H | – | New `Read/Effects/`, a Harmony dependency in `About.xml` |
 | W3.4 | **D4 effect capture, build:** colour-named cell sets for placements and built things, as an `effects` layer | 4 | H | W3.3, W1.C | `Read/Effects/*`, `Read/Layers/*` |

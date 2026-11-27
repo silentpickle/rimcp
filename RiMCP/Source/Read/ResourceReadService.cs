@@ -24,7 +24,8 @@ namespace RiMCP.Read
 
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("summary", SummarizeResources(context.Map, groups)),
-                Dto.Field("resources", resources)), page.Truncated, page.NextCursor, "resources");
+                Dto.Field("resources", resources)), page.Truncated, page.NextCursor, "resources",
+                revisionScope: "resources", rowIds: page.Items.Select(group => group.DefName));
         }
 
         public static object SummarizeResources(Map map, List<ResourceGroup> groups)

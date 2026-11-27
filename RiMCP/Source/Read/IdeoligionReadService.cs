@@ -35,7 +35,12 @@ namespace RiMCP.Read
                 return BridgeResponse.Error(404, "Ideoligion not found.");
             }
 
-            return ReadEnvelope.Ok(context, SerializeIdeoDetail(ideo));
+            string view = context.Request.Get("view");
+            if (view != null && view != "rituals")
+            {
+                return BridgeResponse.Error(400, "Field 'view' must be rituals when supplied.");
+            }
+            return ReadEnvelope.Ok(context, view == "rituals" ? SerializeRituals(ideo, context.Map) : SerializeIdeoDetail(ideo));
         }
 
         public static object SerializePawnIdeoligionSummary(Pawn pawn)
@@ -89,6 +94,32 @@ namespace RiMCP.Read
                     .ThenBy(precept => precept.Label)
                     .Select(SerializePrecept)
                     .ToArray();
+            return dto;
+        }
+
+        private static object SerializeRituals(Ideo ideo, Map map)
+        {
+            var dto = Dto.Obj(Dto.Field("id", ideo.GetUniqueLoadID()), Dto.Field("name", ideo.name));
+            dto["roles"] = ideo.RolesListForReading.Select(role => Dto.Obj(
+                Dto.Field("id", role.GetUniqueLoadID()),
+                Dto.Field("label", role.Label),
+                Dto.Field("active", role.Active),
+                Dto.Field("leader", role.def.leaderRole),
+                Dto.Field("holders", role.ChosenPawns().Select(SummaryDto.Pawn).ToArray()))).ToArray();
+            dto["rituals"] = ideo.PreceptsListForReading.OfType<Precept_Ritual>().Select(ritual => Dto.Obj(
+                Dto.Field("id", ritual.GetUniqueLoadID()),
+                Dto.Field("label", ritual.Label),
+                Dto.Field("def", ritual.def.defName),
+                Dto.Field("roleChange", ritual.def == PreceptDefOf.RoleChange),
+                Dto.Field("anytime", ritual.isAnytime))).ToArray();
+            dto["activeRituals"] = Find.IdeoManager.GetActiveRituals(map)
+                .Where(job => job.Ritual?.ideo == ideo && job.selectedTarget.IsValid && job.selectedTarget.Cell.InBounds(map) && !job.selectedTarget.Cell.Fogged(map))
+                .Select(job => Dto.Obj(
+                    Dto.Field("activeId", job.lord.GetUniqueLoadID()),
+                    Dto.Field("ritualId", job.Ritual.GetUniqueLoadID()),
+                    Dto.Field("label", job.RitualLabel.StripTags()),
+                    Dto.Field("target", Command.Targets.Describe((LocalTargetInfo)job.selectedTarget))))
+                .ToArray();
             return dto;
         }
 

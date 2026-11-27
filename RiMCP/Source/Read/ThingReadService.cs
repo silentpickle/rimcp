@@ -59,7 +59,7 @@ namespace RiMCP.Read
                 Dto.Field("things", rows),
                 Dto.Field("storages", storages.Count == 0 || (fields != null && !fields.Includes("storage")) ? null : storages)),
                 page.Truncated,
-                page.NextCursor, "things");
+                page.NextCursor, "things", revisionScope: "things", rowIds: page.Items.Select(ReadUtil.ThingId));
         }
 
         private static object SerializeThing(Thing thing, Map map, IntVec3? near, ReadDetail detail, Dictionary<string, object> storages, bool inspect)

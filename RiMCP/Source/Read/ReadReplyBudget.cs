@@ -12,17 +12,22 @@ namespace RiMCP.Read
     {
         public static string Serialize(Dictionary<string, object> envelope, ReadRequest request, string pageField = null, string detailSection = null)
         {
+            int maxBytes = MaxBytes(request);
+            string body = Json.Serialize(envelope);
+            return Fits(body, maxBytes) ? body : new CappedReply(envelope, maxBytes, pageField).Fit(request.Cursor, detailSection);
+        }
+
+        internal static int MaxBytes(ReadRequest request)
+        {
             int maxBytes = request.OptionalInt(ReplyLimits.Argument) ?? ReplyLimits.DefaultBytes;
             if (maxBytes < ReplyLimits.MinBytes || maxBytes > ReplyLimits.MaxBytes)
             {
                 throw new BridgeException(400, "maxBytes must be between " + ReplyLimits.MinBytes + " and " + ReplyLimits.MaxBytes + ".");
             }
-
-            string body = Json.Serialize(envelope);
-            return Fits(body, maxBytes) ? body : new CappedReply(envelope, maxBytes, pageField).Fit(request.Cursor, detailSection);
+            return maxBytes;
         }
 
-        private static bool Fits(string body, int maxBytes)
+        internal static bool Fits(string body, int maxBytes)
         {
             return Encoding.UTF8.GetByteCount(body) <= maxBytes;
         }

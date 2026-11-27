@@ -275,6 +275,7 @@ namespace RiMCP.Shared
                 Get(ToolGroups.Diagnostics, "game-settings", "get_game_settings", "Global game options and the colony's storyteller and difficulty, with the choices. Global options work without a colony.", "/v1/settings", RequiredOnly()),
                 Put(ToolGroups.GameSettings, "set-game-settings", "set_game_settings", "Change global options or the colony's storyteller or difficulty preset; only the fields given change. Changing only the storyteller keeps a custom difficulty.", "/v1/settings", GameSettingsInput(), IdempotentMutation(), Body("storytellerDefName", "difficultyDefName", "runInBackground", "pauseOnLoad", "automaticPauseMode", "autosaveIntervalDays", "volumeMaster", "volumeMusic")),
                 Get(ToolGroups.Observe, "colony-status", "get_colony_status", "Colony dashboard: top risks with drill-down hints, and food: stored meals and raw nutrition, daily use at the fed rate (drainNowPerDay is the current, hunger-lowered drain), days left at the fed rate, and the daily trend over up to three days. Only stored food counts.", "/v1/colony-status", Input(MapId())),
+                Get(ToolGroups.Observe, "turn-digest", "get_turn_digest", "A map's compact turn read in at most 2 KiB: pause and blocking windows, immediate risks, top movers, food, recent letters, and the latest advance's outcomes. Read detail with get_map_survey, get_colony_status, get_events or get_advance.", "/v1/turn-digest", Input(MapId())),
                 Get(ToolGroups.Observe, "pawns", "list_pawns", "Pawns by filter. include=[\"assignments\"] adds Assign-tab settings, and include=[\"assignmentOptions\"] the valid choices for them.", "/v1/pawns", Input(MapId(), Detail(), Include(PawnSections.Concat(new[] { "assignmentOptions" }).ToArray()), Limit(), Cursor(), IdsOnly(), Prop("filter", PawnFilter())), "filter"),
                 Get(ToolGroups.Observe, "pawn", "get_pawn", "One pawn by ThingID or load id: needs, mood, health, skills and traits; include adds thoughts, work, assignments, training, gear, or relations, and detail=full adds them all.", "/v1/pawns/{id}", Required(Prop("id", Str("Pawn ThingID or load id.")), MapId(), Detail(), Include(PawnSections))),
                 Get(ToolGroups.Observe, "resources", "list_resources", "Map resources grouped by def, with food, medicine, stack, forbidden, roof, and rot details. Fogged items are hidden.", "/v1/resources", Input(MapId(), Detail(), Limit(), Cursor(), IdsOnly())),
@@ -296,7 +297,9 @@ namespace RiMCP.Shared
                 Get(ToolGroups.Observe, "threats", "list_threats", "Active threats: hostiles, manhunters, predators hunting the colony's people or animals, and fires. Fogged ones are hidden.", "/v1/threats", Input(MapId(), Detail(), Limit(), Cursor())),
                 Get(ToolGroups.Observe, "research", "get_research", "Current research, what stops it (noProject, missingResearchBench, or noResearcher), and paged projects; availableOnly lists those that can start now.", "/v1/research", Input(Detail(), Limit(), Cursor(), Prop("availableOnly",Bool("Only projects that can be started now. Needs a loaded colony."))), "availableOnly"),
                 Get(ToolGroups.Observe, "ideoligions", "list_ideoligions", "Ideoligions with identity, memes, culture, and mode flags; active=false and an empty list without Ideology.", "/v1/ideoligions", Input()),
-                Get(ToolGroups.Observe, "ideoligion", "get_ideoligion", "Get full details for one ideoligion by id returned from list_ideoligions, including description and precepts.", "/v1/ideoligions/{id}", Required(Prop("id", Str("Ideoligion id returned by list_ideoligions.")))),
+                Get(ToolGroups.Observe, "ideoligion", "get_ideoligion", "Get an ideoligion by id from list_ideoligions. Default view gives description and precepts. The rituals view gives roles, holders, ritual IDs, and active rituals on the selected map.", "/v1/ideoligions/{id}", InputWithOptionalMap(true, new[] { "id" }, Prop("id", Str("Ideoligion id returned by list_ideoligions.")), Prop("view", EnumString("Optional focused view for preview_ritual and start_ritual.", "rituals"))), "view"),
+                Get(ToolGroups.Observe, "preview-ritual", "preview_ritual", "Preview a player ideoligion ritual at a visible thing or cell. Shows the native cast, readiness and blockers. For a role change, give pawnId and roleId from the get_ideoligion rituals view (or none to remove the role).", "/v1/rituals/{ritualId}/preview", RitualInput(false), "targetId", "x", "z", "pawnId", "roleId", "rolePawns", "spectatorIds"),
+                Post(ToolGroups.Administration, "start-ritual", "start_ritual", "Start the previewed Ideology ritual without opening the ritual window. Rechecks the target and cast. A role change takes effect if the ceremony succeeds. Give requestId to safely retry.", "/v1/rituals/{ritualId}/start", RitualInput(true), Mutation(false, true), Body("mapId", "targetId", "x", "z", "pawnId", "roleId", "rolePawns", "spectatorIds", "requestId")),
                 Get(ToolGroups.Observe, "quests", "list_quests", "Quests as the Quests tab lists them, hidden ones left out; tab picks available, active, or historical (with dismissed ones). An available quest shows canAccept (else reason and unmetRequirements), expiresInTicks, rewardChoices (each with index, value, and needsAccepter), and accepters: the colonists who can accept it. An accepted quest shows its accepter and the reward chosen. detail=normal adds the description and parts.", "/v1/quests", Input(Detail(), Limit(), Cursor(), Prop("tab",EnumString("Quests tab. Defaults to all three.", "available", "active", "historical"))), "tab"),
                 Post(ToolGroups.Decisions, "answer-letter", "answer_letter", "Answer a letter waiting (letterId) as its dialog does, by option and revision from get_events; refused if its options changed since. dismiss: true dismisses it where the game allows. Shown in game. If the answer leads to another question, dialogs has it for answer_dialog.", "/v1/letters/{letterId}/answer", AnswerLetterInput(), Mutation(false, true), Body("option", "revision", "dismiss", "requestId")),
                 Post(ToolGroups.Decisions, "tell-player", "tell_player", "Tell the player something in game, in your own words: a plan, a warning, or something to look at. It shows as a message labelled as yours; attention: true sends a letter instead, which pauses the game if the player's options say so. Up to 280 characters; one note every 10 seconds, and 3 letters per in-game day. The agent log shows notes apart from what agents did.", "/v1/notes", TellPlayerInput(), Mutation(false, false), Body("text", "about", "x", "z", "attention", "requestId")),
@@ -353,6 +356,7 @@ namespace RiMCP.Shared
                 Post(ToolGroups.GameSetup, "save-game", "save_game", "Save the colony under a name (an operation; see get_operation). It succeeds only when verified, since the game hides its own save errors: the file is complete and nothing was logged as an error while saving. failed or unverified means don't rely on it. overwrite replaces an existing save. Not in commitment mode." + OperationRetries, "/v1/saves", SaveGameInput(), Mutation(false, true), Body("name", "overwrite", "requestId"), "waitSeconds"),
                 Post(ToolGroups.GameSetup, "load-game", "load_game", "Load a save (an operation; see get_operation). With a colony loaded, give saveFirst (a save name) or discardUnsaved: true; saving first pauses and holds the game until it is replaced, and a failed save stops the load. If the save's version or mods differ, the game asks the player and the operation waits (awaitingConfirmation). Not while a commitment-mode game is loaded." + OperationRetries, "/v1/session/load", ReplaceInput(true), Mutation(false, true), Body("name", "saveFirst", "discardUnsaved", "overwrite", "requestId"), "waitSeconds"),
                 Post(ToolGroups.GameSetup, "leave-game", "leave_game", "Return to the main menu (an operation; see get_operation). Give saveFirst (a save name) or discardUnsaved: true; saving first pauses and leaves in the same moment, and a failed save stops it. Commitment-mode games save to their own slot, as in game, and take neither." + OperationRetries, "/v1/session/leave", ReplaceInput(false), Mutation(false, true), Body("saveFirst", "discardUnsaved", "overwrite", "requestId"), "waitSeconds"),
+                Get(ToolGroups.Observe, "preview-scenario", "preview_scenario", "Read a scenario's starting pawn counts, declared supplies, animals and setup support before opening new-game setup. Works at the main menu or with a colony loaded.", "/v1/setup/scenario-preview", Required(Prop("scenario", Str("Scenario name from list_scenarios.")), Prop("category", Str("Category from list_scenarios, to disambiguate names."))), "scenario", "category"),
                 Get(ToolGroups.Observe, "list-scenarios", "list_scenarios", "Scenarios for a new game, as the scenario screen lists them, and whether RimMCP can set each up (supported); manualScreens lists screens to finish in game. Works at the main menu.", "/v1/setup/scenarios", PagedInput()),
                 Get(ToolGroups.Observe, "get-setup", "get_setup", "The new game being set up: its screen (stage), revision, choices, and options. Setup commands take this revision as expectedRevision and are refused if anyone, such as the player, changed the setup since (lastChangeExternal); handoff says when to finish a screen in game. At the customIdeoligion stage it shows the ideoligion, each precept's id and box options, the meme catalog, and blocksNext.", "/v1/setup", ObjectSchema(J(F("include", J(F("type", "array"), F("items", J(F("type", "string"), F("enum", A("preceptOptions")))), F("description", "preceptOptions adds every option the custom ideoligion screen's Add buttons offer, allowed or with the reason.")))))),
                 PostAnyGame(ToolGroups.Observe, "find-starting-sites", "find_starting_sites", "Search the world for settleable starting tiles (an operation; see get_operation), longest growing period first, by biome, hilliness, river, road, coast, temperature, rainfall, growing days, and distance to other factions' settlements, optionally leaving out tiles that would cost goodwill. Each site names its nearest counted settlement and any it encroaches on. Needs the starting site screen." + OperationRetries, "/v1/setup/sites/search", SiteSearchInput(), ReadOnly(), Body("biomes", "hilliness", "river", "road", "coastal", "minTemperature", "maxTemperature", "minRainfall", "maxRainfall", "minGrowingDays", "minSettlementDistance", "maxSettlementDistance", "settlementRelations", "avoidEncroaching", "limit", "requestId"), "waitSeconds"),
@@ -683,6 +687,24 @@ namespace RiMCP.Shared
             return ObjectSchema(props, "interactionId", "page");
         }
 
+        private static Dictionary<string, object> RitualInput(bool mutate)
+        {
+            Dictionary<string, object> props = MapProperty();
+            props["ritualId"] = Str("The ritual precept id returned by get_ideoligion.");
+            props["targetId"] = Str("A visible thing to hold the ritual at, such as an ideogram. Give this or both x and z.");
+            props["x"] = Int("Ritual target cell x.", 0, 1000);
+            props["z"] = Int("Ritual target cell z.", 0, 1000);
+            props["pawnId"] = Str("For role change, the colonist who will receive or lose the role.");
+            props["roleId"] = Str("For role change, a role precept id from get_ideoligion, or none to remove the current role.");
+            props["rolePawns"] = StrArray("Optional ritual cast overrides in roleId=pawnId form. Repeat a role for multiple pawns. Unspecified roles use the native cast.");
+            props["spectatorIds"] = StrArray("Optional spectator pawn IDs. Omit for the native defaults.");
+            if (mutate)
+            {
+                props["requestId"] = SafeRetry();
+            }
+            return ObjectSchema(props, "ritualId");
+        }
+
         private static Dictionary<string, object> AssignOwnerInput()
         {
             Dictionary<string, object> props = MapProperty();
@@ -786,6 +808,21 @@ namespace RiMCP.Shared
         private static ToolSpec Get(string group, string handlerId, string name, string description, string pathTemplate, Dictionary<string, object> inputSchema, params string[] extraQueryKeys)
         {
             string[] extensions = AddReadShape(handlerId, inputSchema);
+            switch (handlerId)
+            {
+                case "map-survey":
+                case "pawns":
+                case "things":
+                case "buildings":
+                case "resources":
+                case "work":
+                case "zones":
+                    var props = (Dictionary<string, object>)inputSchema["properties"];
+                    props["trackRevision"] = Bool("Return a revision for this complete reply if it fits the byte budget.");
+                    props["since"] = Str("Previous revision from this same read with the same arguments. Returns only changes where available.");
+                    extensions = extensions.Concat(new[] { "trackRevision", "since" }).ToArray();
+                    break;
+            }
             string[] queryKeys = SharedReadKeys.Concat(extraQueryKeys).Concat(extensions).Append(ReplyLimits.Argument)
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             return new ToolSpec(handlerId, group, name, description, "GET", pathTemplate, queryKeys, new string[0], WithReplyLimit(inputSchema), ReadOnly(), true);

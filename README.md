@@ -16,7 +16,7 @@ I want an agent to play a RimWorld colony across many sessions and eventually ma
 
 Advance runs now summarize what changed and can stop for specific work, such as a blueprint finishing. Those summaries will feed a compact turn digest and a mode that keeps the game running between turns. The longer roadmap includes shared construction previews, caravan formation and reforming, and narrower roles for agents that help maintain the colony.
 
-[Roadmap overview](docs/roadmap.md) · [Detailed fork roadmap](docs/roadmap-detail.md) · [Survey workflow](docs/survey-workflow.md) · [Wave 2 workflow and verification](docs/wave-2-workflow.md) · [Build this fork](#building-from-source)
+[Roadmap overview](docs/roadmap.md) · [Detailed fork roadmap](docs/roadmap-detail.md) · [Survey workflow](docs/survey-workflow.md) · [Wave 2 workflow and verification](docs/wave-2-workflow.md) · [Wave 3 turn digest and deltas](docs/wave-3-workflow.md) · [Build this fork](#building-from-source)
 
 ## Current MCP tools
 

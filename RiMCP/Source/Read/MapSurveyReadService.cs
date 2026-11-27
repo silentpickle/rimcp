@@ -31,7 +31,7 @@ namespace RiMCP.Read
             data["movers"] = movers?.Describe(moverLimit);
             data["notable"] = includeNotable ? SurveyNotable.Describe(map, colony, notableLimit) : null;
             data["tiles"] = SurveyTiles.Describe(map.Size);
-            return ReadEnvelope.Ok(context, data, detailSection: "regions");
+            return ReadEnvelope.Ok(context, data, detailSection: "regions", revisionScope: "survey");
         }
 
         private static int Limit(ReadRequest query, string name, int fallback, int maximum)

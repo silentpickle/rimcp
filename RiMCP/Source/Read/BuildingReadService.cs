@@ -43,7 +43,7 @@ namespace RiMCP.Read
                 Dto.Field("scope", scope),
                 Dto.Field("buildings", page.Items.Select(building => ReadProjection.Serialize(fields, building, () => SerializeBuilding(building, query.Detail, includeContents && (!whole || building.Faction == Faction.OfPlayer), query.Wants("inspectText")))).ToArray())),
                 page.Truncated,
-                page.NextCursor, "buildings");
+                page.NextCursor, "buildings", revisionScope: "buildings", rowIds: page.Items.Select(ReadUtil.ThingId));
         }
 
         public static BridgeResponse GetBuilding(BridgeRequest request, RouteMatch route)

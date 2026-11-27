@@ -27,6 +27,7 @@ namespace RiMCP.Command
         private static readonly Assembly Game = typeof(Pawn).Assembly;
 
         private const string AsksTarget = "It asks for a target, which RimMCP cannot check first yet.";
+        private const string IdeologyRitualWindow = "It opens the ritual window. For Ideology rituals, use get_ideoligion with view rituals, then preview_ritual and start_ritual.";
         private const string RitualWindow = "It opens the ritual window, which agents cannot use yet.";
 
         // Every provider in the game, so one added in an update is noticed. The generic ones (a
@@ -79,7 +80,7 @@ namespace RiMCP.Command
             { "FloatMenuOptionProvider_RescuePawn", null },
             { "FloatMenuOptionProvider_ReturnSlaveToBed", null },
             { "FloatMenuOptionProvider_Romance", null },
-            { "FloatMenuOptionProvider_StartRitual", RitualWindow },
+            { "FloatMenuOptionProvider_StartRitual", IdeologyRitualWindow },
             { "FloatMenuOptionProvider_Strip", null },
             { "FloatMenuOptionProvider_Trade", "Trading opens the trade window when the pawn reaches the trader; agents cannot trade yet." },
             { "FloatMenuOptionProvider_TransferEntity", "It asks for a holding platform, which RimMCP cannot check first yet." },
@@ -138,7 +139,7 @@ namespace RiMCP.Command
             { "Command_SetBedOwnerType", null },
             { "Command_SetNeuralSuperchargerAutoUse", null },
             { "Command_BestowerCeremony", RitualWindow },
-            { "Command_Ritual", RitualWindow },
+            { "Command_Ritual", IdeologyRitualWindow },
             { "Command_LoadToTransporter", "It opens the loading window, which agents cannot use yet." },
             { "Command_Settle", "Settling is chosen on the world map, which agents cannot use yet." }
         };

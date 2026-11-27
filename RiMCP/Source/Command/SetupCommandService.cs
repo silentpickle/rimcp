@@ -24,16 +24,7 @@ namespace RiMCP.Command
             ReadContext context = ReadContext.From(request);
             List<Scenario> scenarios = ScenarioLister.AllScenarios().Where(scenario => scenario.showInUI).ToList();
             Page<Scenario> page = new Page<Scenario>(scenarios, context.Request);
-            object[] rows = page.Items.Select(scenario =>
-            {
-                string[] manual = UnsupportedScreens(scenario);
-                return (object)Dto.Obj(
-                    Dto.Field("name", scenario.name),
-                    Dto.Field("category", scenario.Category.ToString()),
-                    Dto.Field("summary", scenario.summary),
-                    Dto.Field("supported", manual.Length == 0),
-                    Dto.Field("manualScreens", manual.Length == 0 ? null : manual));
-            }).ToArray();
+            object[] rows = page.Items.Select(DescribeScenario).ToArray();
             return ReadEnvelope.Ok(context, Dto.Obj(Dto.Field("scenarios", rows)), page.Truncated, page.NextCursor, "scenarios");
         }
 
@@ -55,6 +46,11 @@ namespace RiMCP.Command
             return SessionCommandService.Begin(request, "start_setup", requestId, () =>
             {
                 Scenario scenario = FindScenario(body.Scenario, body.Category);
+                string[] manual = UnsupportedScreens(scenario);
+                if (manual.Length > 0)
+                {
+                    throw new CommandException(409, scenario.name + " has setup screens RimMCP does not drive yet (" + string.Join(", ", manual) + "); start it in game.");
+                }
                 SessionCommandService.RequireSettled();
                 if (SetupController.OpenPage != null)
                 {
@@ -363,11 +359,6 @@ namespace RiMCP.Command
             if (matches.Count > 1)
             {
                 throw new CommandException(409, "More than one scenario is named '" + name.Trim() + "' (" + string.Join(", ", matches.Select(scenario => scenario.Category.ToString()).Distinct().ToArray()) + "); pass category to choose one" + (wanted.HasValue ? ", or rename one in game" : "") + ".");
-            }
-            string[] manual = UnsupportedScreens(matches[0]);
-            if (manual.Length > 0)
-            {
-                throw new CommandException(409, matches[0].name + " has setup screens RimMCP does not drive yet (" + string.Join(", ", manual) + "); start it in game.");
             }
             return matches[0];
         }

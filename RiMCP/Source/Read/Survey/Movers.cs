@@ -91,6 +91,23 @@ namespace RiMCP.Read
                 Dto.Field("omittedSmallGameKinds", smallGame.Length > SmallGameKinds ? (int?)(smallGame.Length - SmallGameKinds) : null));
         }
 
+        internal object DescribeDigest(int limit)
+        {
+            return groups.Take(limit).Select(group => Dto.Obj(
+                Dto.Field("id", GroupId(group)),
+                Dto.Field("kind", Kinds[(int)group.Rank]),
+                Dto.Field("count", group.Members.Count),
+                Dto.Field("distance", group.Distance),
+                Dto.Field("bearing", SurveyGeometry.Bearing(colony, group.Centre)),
+                Dto.Field("job", MainJob(group)))).ToArray();
+        }
+
+        private static string GroupId(Group group)
+        {
+            string kind = Kinds[(int)group.Rank];
+            return group.Lord == null ? kind + "-" + group.Key : kind + "-" + group.Lord.GetUniqueLoadID();
+        }
+
         private Seen Classify(Pawn pawn)
         {
             Rank rank = RankOf(pawn);
@@ -169,7 +186,7 @@ namespace RiMCP.Read
             string kind = Kinds[(int)group.Rank];
             bool hostile = group.Rank == Rank.Hostile;
             return Dto.Obj(
-                Dto.Field("id", group.Lord == null ? kind + "-" + group.Key : kind + "-" + group.Lord.GetUniqueLoadID()),
+                Dto.Field("id", GroupId(group)),
                 Dto.Field("kind", kind),
                 Dto.Field("def", group.Lord == null || group.Rank == Rank.AnimalThreat ? first.def.defName : null),
                 Dto.Field("faction", first.Faction?.Name),
