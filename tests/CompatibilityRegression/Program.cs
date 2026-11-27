@@ -305,6 +305,8 @@ internal static partial class Program
             }
         });
         Test("map layers leave out their rows when they mark nothing", CheckMapLayers);
+        Test("W1C_scaled_tiles", CheckScaledMapTiles);
+        Test("W1C_exact_counts", CheckMapSymbolCounts);
         Test("order_pawn and designate offer exactly the kinds they handle, and queue reaches the handler", () =>
         {
             CheckOfferedKinds("order_pawn", "order", "RiMCP.Command.PawnOrderCommandService", "Orders");
@@ -2912,11 +2914,12 @@ internal static partial class Program
 
     private static void CheckMapLayers()
     {
-        Type service = mod.GetType("RiMCP.Read.MapViewReadService", true);
-        object roof = ((Array)service.GetField("Layers", Static).GetValue(null)).GetValue(0);
-        MethodInfo draw = service.GetNestedType("Grid", BindingFlags.NonPublic).GetMethod("Draw", Static);
-        MethodInfo layerDto = service.GetMethod("LayerDto", Static);
-        Func<Func<IntVec3, char>, Dictionary<string, object>> layer = symbol => (Dictionary<string, object>)layerDto.Invoke(null, new[] { roof, draw.Invoke(null, new object[] { 10, 20, 4, 3, symbol }) });
+        object roof = ((IEnumerable)Invoke("RiMCP.Read.MapLayerRegistry", "Select", (object)new[] { "roof" })).Cast<object>().Single();
+        Func<Func<IntVec3, char>, Dictionary<string, object>> layer = symbol =>
+        {
+            object grid = Invoke("RiMCP.Read.MapLayerProjection", "Read", new CellRect(10, 20, 4, 3), 1, false, symbol);
+            return (Dictionary<string, object>)grid.GetType().GetMethod("DescribeLayer").Invoke(grid, new[] { roof, (object)false });
+        };
 
         Dictionary<string, object> open = layer(cell => cell.x == 10 ? '?' : '-');
         Check(open.Count == 1 && (int)open["markedCells"] == 0, "a layer that marks nothing must leave out its rows and legend");

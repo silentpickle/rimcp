@@ -41,8 +41,10 @@ $env:NUGET_PACKAGES = Join-Path $PWD '.nuget/packages'
 dotnet restore tests/CompatibilityRegression/CompatibilityRegression.csproj --source $env:NUGET_PACKAGES "-p:RimWorldManagedPath=$managed"
 ```
 
-The ninety-one checks cover:
+The ninety-three checks cover:
 
+- Scaled map tiles with partial edges and deterministic ties, plus exact counts
+  from the original cells.
 - All nine advance watchers, including simultaneous stop priority, threat-letter
   aliasing, per-event fields, and the last recorded event before overflow.
 - Byte budgets on paged reads, including UTF-8 width, an exact size boundary,

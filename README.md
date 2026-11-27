@@ -44,6 +44,10 @@ Most tools accept the same optional read controls:
 
 The building, thing, plant, and pawn lists accept `fields`. Select `["id","def","cell"]` for a compact row with the ID, defName and `{x,z}` cell. Other projected fields follow each tool's `detail` and `include`. `get_pawn`, `get_building`, and `list_gizmos` accept a single ID or up to 32 `ids`. Batch replies preserve input order and return missing IDs as per-row errors.
 
+Map views take `scale` from 1 to 16. Width, height, and origin are still in game cells. At scale 1 the grid is at most 40×40. A scaled grid has at most 48 tiles on either side, with each tile showing the most common visible or unexplored symbol. Tiles are anchored at the southwest origin, partial tiles are included, and rows still run north to south. For example, `{"x":0,"z":0,"width":225,"height":225,"scale":5}` gives a 45×45 grid on a map of that size.
+
+Use `as: "counts"` for exact counts of the underlying symbols, including `?` for unexplored cells. Counts views omit grid rows and can cover up to 400×400 cells. The optional roof and designation layers support both projections and keep `markedCells` in game cells at every scale.
+
 Tool payloads default to 4,096 UTF-8 bytes. Set `maxBytes` from 1,024 to 32,768 to change the budget. Capped reads report `truncated: true` and a `budget` with the omitted fields or row count. If `nextCursor` appears, continue with the same filters and the returned cursor. For an omitted section or a page whose first row did not fit, retry using the original query with a larger budget, less detail, or narrower filters. For event history, keep the original `since` when the history section was omitted.
 
 The stdio proxy enforces a 64 KiB ceiling on bridge reply bodies and a 128 KiB ceiling on the MCP tool result, which can contain both text and structured JSON. A capped command payload keeps its success status and available receipt details. To recover more detail, reuse the original `requestId` with a larger budget where the tool supports safe retries. Otherwise, read back the game or operation state before repeating a command.

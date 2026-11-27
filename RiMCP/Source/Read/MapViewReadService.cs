@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using RimWorld;
 using RiMCP.Bridge;
+using RiMCP.Shared;
 using Verse;
 
 namespace RiMCP.Read
@@ -14,9 +14,6 @@ namespace RiMCP.Read
     // the same cells, each with its own symbols. Unexplored cells reveal nothing.
     internal static class MapViewReadService
     {
-        private const int DefaultSize = 32;
-        private const int MaxSize = 40;
-
         private static readonly Dictionary<char, string> Meanings = new Dictionary<char, string>
         {
             { '@', "colonist past Z" },
@@ -40,109 +37,89 @@ namespace RiMCP.Read
             { '_', "ground too poor to farm, or floor" }
         };
 
-        private static readonly Layer[] Layers =
-        {
-            new Layer("roof", RoofSymbol, '-', new Dictionary<char, string>
-            {
-                { 'R', "thick rock roof" },
-                { 'r', "thin rock roof" },
-                { 'b', "built roof" },
-                { '-', "no roof" }
-            }),
-            new Layer("designations", DesignationSymbol, '-', new Dictionary<char, string>
-            {
-                { 'd', "deconstruct" },
-                { 'm', "mine" },
-                { 'c', "cut plant" },
-                { 'h', "harvest or chop wood" },
-                { 'u', "haul" },
-                { 'o', "other order" },
-                { '-', "no order" }
-            })
-        };
-
-        // When a cell has several orders, the first in this list is shown.
-        private const string DesignationPrecedence = "dmchuo-";
-
         public static BridgeResponse GetMapView(BridgeRequest request, RouteMatch route)
         {
             ReadContext context = ReadContext.FromMap(request);
             ReadRequest query = context.Request;
             Map map = context.Map;
+            int scale = Scale(query);
+            bool countsOnly = CountsOnly(query);
+            CellRect bounds = Bounds(query, map, scale, countsOnly);
+            MapLayer[] layers = MapLayerRegistry.Select(query.List("layers")).ToArray();
 
-            int width = Math.Min(Size(query, "width"), map.Size.x);
-            int height = Math.Min(Size(query, "height"), map.Size.z);
-            List<Layer> layers = new List<Layer>();
-            foreach (string name in query.List("layers"))
-            {
-                Layer layer = Layers.FirstOrDefault(candidate => string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase));
-                if (layer == null)
-                {
-                    throw new BridgeException(400, "Unknown layer '" + name + "'. Supported layers: " + string.Join(", ", Layers.Select(candidate => candidate.Name).ToArray()) + ".");
-                }
-                if (!layers.Contains(layer))
-                {
-                    layers.Add(layer);
-                }
-            }
-
-            // Without a position, centre the view on the colonists.
-            IntVec3 centre = ColonistCentre(map);
-            int x0 = query.OptionalInt("x") ?? centre.x - width / 2;
-            int z0 = query.OptionalInt("z") ?? centre.z - height / 2;
-            x0 = Math.Max(0, Math.Min(x0, map.Size.x - width));
-            z0 = Math.Max(0, Math.Min(z0, map.Size.z - height));
-
-            Dictionary<char, string> meanings = new Dictionary<char, string>();
-            Dictionary<IntVec3, char> pawns = PawnSymbols(map, new CellRect(x0, z0, width, height), meanings);
-            foreach (KeyValuePair<char, string> pair in Meanings)
+            var meanings = new Dictionary<char, string>();
+            Dictionary<IntVec3, char> pawns = PawnSymbols(map, bounds, meanings);
+            foreach (var pair in Meanings)
             {
                 meanings[pair.Key] = pair.Value;
             }
-            char pawn;
             float farmable = GrowingSummary.ZoneMinFertility();
-            Grid view = Grid.Draw(x0, z0, width, height, cell => cell.Fogged(map) ? '?' : pawns.TryGetValue(cell, out pawn) ? pawn : CellSymbol(cell, map, farmable));
-            Dictionary<string, object> layerDtos = new Dictionary<string, object>();
-            foreach (Layer layer in layers)
-            {
-                layerDtos[layer.Name] = LayerDto(layer, Grid.Draw(x0, z0, width, height, cell => cell.Fogged(map) ? '?' : layer.Symbol(cell, map)));
-            }
+            MapLayerProjection view = ReadLayer(map, bounds, scale, countsOnly,
+                cell => pawns.TryGetValue(cell, out char pawn) ? pawn : CellSymbol(cell, map, farmable));
+            var layerDtos = layers.ToDictionary(layer => layer.Name,
+                layer => ReadLayer(map, bounds, scale, countsOnly, cell => layer.Sample(cell, map)).DescribeLayer(layer, countsOnly));
 
             return ReadEnvelope.Ok(context, Dto.Obj(
-                Dto.Field("origin", Dto.Obj(Dto.Field("x", x0), Dto.Field("z", z0))),
-                Dto.Field("width", width),
-                Dto.Field("height", height),
+                Dto.Field("origin", Dto.Obj(Dto.Field("x", bounds.minX), Dto.Field("z", bounds.minZ))),
+                Dto.Field("width", bounds.Width),
+                Dto.Field("height", bounds.Height),
+                Dto.Field("scale", scale > 1 ? (int?)scale : null),
                 Dto.Field("rows", view.Rows),
-                Dto.Field("legend", Legend(meanings, view)),
+                Dto.Field("counts", countsOnly ? view.CountsDto() : null),
+                Dto.Field("legend", view.Legend(meanings)),
                 Dto.Field("layers", layerDtos.Count == 0 ? null : layerDtos)));
         }
 
-        // A layer reports how many explored cells it marks; its rows are left out when it marks none,
-        // so asking for a layer with nothing in view costs one line.
-        private static object LayerDto(Layer layer, Grid grid)
+        private static MapLayerProjection ReadLayer(Map map, CellRect bounds, int scale, bool countsOnly, Func<IntVec3, char> sample)
         {
-            int marked = grid.Counts.Where(pair => pair.Key != layer.Blank && pair.Key != '?').Sum(pair => pair.Value);
-            return Dto.Obj(
-                Dto.Field("markedCells", marked),
-                Dto.Field("rows", marked == 0 ? null : grid.Rows),
-                Dto.Field("legend", marked == 0 ? null : Legend(layer.Meanings, grid)));
+            return MapLayerProjection.Read(bounds, scale, countsOnly, cell => cell.Fogged(map) ? MapLayerProjection.Unexplored : sample(cell));
         }
 
-        private static Dictionary<string, object> Legend(Dictionary<char, string> meanings, Grid grid)
+        private static CellRect Bounds(ReadRequest query, Map map, int scale, bool countsOnly)
         {
-            Dictionary<string, object> legend = new Dictionary<string, object>();
-            if (grid.Counts.ContainsKey('?'))
+            int limit = countsOnly ? MapViewShape.MaxCellSpan : GridCellLimit(scale);
+            int fallback = Math.Min(MapViewShape.DefaultGridSize * scale, limit);
+            int width = Math.Min(Size(query, "width", fallback, limit), map.Size.x);
+            int height = Math.Min(Size(query, "height", fallback, limit), map.Size.z);
+            IntVec3 centre = ColonistCentre(map);
+            int x0 = query.OptionalInt("x") ?? centre.x - width / 2;
+            int z0 = query.OptionalInt("z") ?? centre.z - height / 2;
+            return new CellRect(Math.Max(0, Math.Min(x0, map.Size.x - width)),
+                Math.Max(0, Math.Min(z0, map.Size.z - height)), width, height);
+        }
+
+        private static int GridCellLimit(int scale)
+        {
+            return scale == 1 ? MapViewShape.MaxFineGridSize : Math.Min(MapViewShape.MaxCellSpan, MapViewShape.MaxCoarseGridSize * scale);
+        }
+
+        private static int Scale(ReadRequest request)
+        {
+            return Size(request, "scale", 1, MapViewShape.MaxScale);
+        }
+
+        private static bool CountsOnly(ReadRequest request)
+        {
+            string projection = request.Get("as");
+            if (projection == null || string.Equals(projection, MapViewShape.Grid, StringComparison.OrdinalIgnoreCase))
             {
-                legend["?"] = "unexplored";
+                return false;
             }
-            foreach (KeyValuePair<char, string> pair in meanings)
+            if (string.Equals(projection, MapViewShape.Counts, StringComparison.OrdinalIgnoreCase))
             {
-                if (grid.Counts.ContainsKey(pair.Key))
-                {
-                    legend[pair.Key.ToString()] = pair.Value;
-                }
+                return true;
             }
-            return legend;
+            throw new BridgeException(400, "Field 'as' must be grid or counts.");
+        }
+
+        private static int Size(ReadRequest query, string field, int fallback, int limit)
+        {
+            int size = query.OptionalInt(field) ?? fallback;
+            if (size < 1 || size > limit)
+            {
+                throw new BridgeException(400, "Field '" + field + "' must be 1 to " + limit + ".");
+            }
+            return size;
         }
 
         // Colonists get letters by when they arrived (A is the earliest ThingID), so a colonist keeps
@@ -256,58 +233,6 @@ namespace RiMCP.Read
             return fertility >= 1.4f ? ':' : fertility >= 0.7f ? '.' : fertility >= farmable ? ',' : '_';
         }
 
-        // Orders on the cell or on things in it: AllDesignationsAt covers both.
-        private static char DesignationSymbol(IntVec3 cell, Map map)
-        {
-            char shown = '-';
-            foreach (Designation designation in map.designationManager.AllDesignationsAt(cell))
-            {
-                char symbol = DesignationChar(designation.def);
-                if (DesignationPrecedence.IndexOf(symbol) < DesignationPrecedence.IndexOf(shown))
-                {
-                    shown = symbol;
-                }
-            }
-            return shown;
-        }
-
-        private static char DesignationChar(DesignationDef def)
-        {
-            if (def == DesignationDefOf.Deconstruct || def == DesignationDefOf.Uninstall)
-            {
-                return 'd';
-            }
-            if (def == DesignationDefOf.Mine || def == DesignationDefOf.MineVein)
-            {
-                return 'm';
-            }
-            if (def == DesignationDefOf.CutPlant)
-            {
-                return 'c';
-            }
-            if (def == DesignationDefOf.HarvestPlant)
-            {
-                return 'h';
-            }
-            return def == DesignationDefOf.Haul ? 'u' : 'o';
-        }
-
-        private static char RoofSymbol(IntVec3 cell, Map map)
-        {
-            RoofDef roof = map.roofGrid.RoofAt(cell);
-            return roof == null ? '-' : roof.isThickRoof ? 'R' : roof.isNatural ? 'r' : 'b';
-        }
-
-        private static int Size(ReadRequest query, string field)
-        {
-            int size = query.OptionalInt(field) ?? DefaultSize;
-            if (size < 1 || size > MaxSize)
-            {
-                throw new BridgeException(400, "Field '" + field + "' must be 1 to " + MaxSize + ".");
-            }
-            return size;
-        }
-
         private static IntVec3 ColonistCentre(Map map)
         {
             List<Pawn> colonists = map.mapPawns.FreeColonistsSpawned.ToList();
@@ -319,49 +244,6 @@ namespace RiMCP.Read
                 (int)Math.Round(colonists.Average(pawn => pawn.Position.x)),
                 0,
                 (int)Math.Round(colonists.Average(pawn => pawn.Position.z)));
-        }
-
-        // An extra grid over the view's cells. Blank is the symbol for a cell the layer does not mark.
-        private sealed class Layer
-        {
-            public readonly string Name;
-            public readonly Func<IntVec3, Map, char> Symbol;
-            public readonly char Blank;
-            public readonly Dictionary<char, string> Meanings;
-
-            public Layer(string name, Func<IntVec3, Map, char> symbol, char blank, Dictionary<char, string> meanings)
-            {
-                Name = name;
-                Symbol = symbol;
-                Blank = blank;
-                Meanings = meanings;
-            }
-        }
-
-        // Rows of symbols, north first, with how often each symbol appears.
-        private sealed class Grid
-        {
-            public string[] Rows;
-            public readonly Dictionary<char, int> Counts = new Dictionary<char, int>();
-
-            public static Grid Draw(int x0, int z0, int width, int height, Func<IntVec3, char> symbol)
-            {
-                Grid grid = new Grid { Rows = new string[height] };
-                for (int z = z0 + height - 1; z >= z0; z--)
-                {
-                    StringBuilder row = new StringBuilder(width);
-                    for (int x = x0; x < x0 + width; x++)
-                    {
-                        char cell = symbol(new IntVec3(x, 0, z));
-                        row.Append(cell);
-                        int count;
-                        grid.Counts.TryGetValue(cell, out count);
-                        grid.Counts[cell] = count + 1;
-                    }
-                    grid.Rows[z0 + height - 1 - z] = row.ToString();
-                }
-                return grid;
-            }
         }
     }
 }

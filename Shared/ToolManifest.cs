@@ -153,6 +153,19 @@ namespace RiMCP.Shared
         public static readonly string[] GizmoFields = Common.Concat(new[] { "thing", "revision", "gizmos" }).ToArray();
     }
 
+    internal static class MapViewShape
+    {
+        public const string Roof = "roof";
+        public const string Designations = "designations";
+        public const string Grid = "grid";
+        public const string Counts = "counts";
+        public const int DefaultGridSize = 32;
+        public const int MaxFineGridSize = 40;
+        public const int MaxCoarseGridSize = 48;
+        public const int MaxCellSpan = 400;
+        public const int MaxScale = 16;
+    }
+
     internal static class ReplyLimits
     {
         public const string Argument = "maxBytes";
@@ -252,7 +265,7 @@ namespace RiMCP.Shared
                 Get(ToolGroups.Observe, "pawn", "get_pawn", "One pawn by ThingID or load id: needs, mood, health, skills and traits; include adds thoughts, work, assignments, training, gear, or relations, and detail=full adds them all.", "/v1/pawns/{id}", Required(Prop("id", Str("Pawn ThingID or load id.")), MapId(), Detail(), Include(PawnSections))),
                 Get(ToolGroups.Observe, "resources", "list_resources", "Map resources grouped by def, with food, medicine, stack, forbidden, roof, and rot details. Fogged items are hidden.", "/v1/resources", Input(MapId(), Detail(), Limit(), Cursor(), IdsOnly())),
                 Get(ToolGroups.Observe, "things", "find_things", "Find haulable items (resources, food, medicine, weapons, apparel, chunks, corpses, minified buildings) with id, position, count, forbidden, and storage. Filter by def, category, excludeCategory, label, forbidden, inStorage, or distance from x and z, which sorts by distance. Unexplored areas are not searched.", "/v1/things", Input(MapId(), Detail(), Limit(), Cursor(), IdsOnly(),Prop("def", Str("Exact ThingDef defName, such as Steel or MealSimple.")), Prop("category", Str("ThingCategoryDef defName, such as Foods, Medicine, Weapons, or ResourcesRaw.")), Prop("excludeCategory", J(F("type", "array"), F("items", J(F("type", "string"))), F("description", "ThingCategoryDef defNames to leave out, subcategories included."))), Prop("query", Str("Text to find in the item label or defName.")), Prop("forbidden", Bool("Only forbidden (true) or only allowed (false) items.")), Prop("inStorage", Bool("Only items in storage that accepts them (true), or only items outside it (false).")), Prop("x", Int("Search centre x.", 0, 1000)), Prop("z", Int("Search centre z.", 0, 1000)), Prop("radius", Int("Search radius in cells around x and z.", 1, 500))), "def", "category", "excludeCategory", "query", "forbidden", "inStorage", "x", "z", "radius"),
-                Get(ToolGroups.Observe, "map-view", "get_map_view", "A character map of an area, one character per cell: rows[0] is the north edge (z = origin.z + height - 1), each row running west to east from origin.x. Each cell shows its top feature: pawn, building or blueprint, tree, item, zone, water, or fertility. Capital letters are colonists, named in the legend, which lists only symbols shown; unexplored cells are blank. Defaults to 32x32 around the colonists, at most 40x40. layers adds roof or designation grids.", "/v1/map/view", InputWithOptionalMap(true, new string[0], Prop("x", Int("West edge of the view.", 0, 1000)), Prop("z", Int("South edge of the view.", 0, 1000)), Prop("width", Int("Columns, 1 to 40. Defaults to 32.", 1, 40)), Prop("height", Int("Rows, 1 to 40. Defaults to 32.", 1, 40)), Prop("layers", J(F("type", "array"), F("items", EnumString("Extra layer.", "roof", "designations")), F("description", "Extra grids to include.")))), "x", "z", "width", "height", "layers"),
+                Get(ToolGroups.Observe, "map-view", "get_map_view", "Map view of a rectangle in game cells. A grid runs north to south from the rectangle's north edge, with columns west to east. Each symbol shows the top feature. ? means unexplored. scale combines cells into tiles by most common symbol. as=counts returns exact counts by symbol without grid rows. layers adds roof or designations.", "/v1/map/view", MapViewInput(), "x", "z", "width", "height", "layers", "scale", "as"),
                 Get(ToolGroups.Observe, "check-placement", "check_placement", "Check whether a building fits at x and z, or find where it fits in an area up to 20x20, with the game's build checks. Returns fitting positions (nearest the middle first) with footprint and interaction cell offsets, rejections grouped by reason, the cost, and blockers such as missingMaterial or noConstructor. Changes nothing; uses the map shown in game.", "/v1/placement", InputWithOptionalMap(true, new[] { "def", "x", "z" }, Prop("def", Str("Building defName, such as Campfire, FueledStove, ButcherSpot, or Wall.")), Prop("stuff", Str("Material defName for buildings made from one, such as WoodLog or Steel. Defaults to the game's choice.")), Prop("rotation", EnumString("Facing. Defaults to the building's usual facing.", "north", "east", "south", "west")), Prop("x", Int("Position x, or the west edge of the positions to check.", 0, 1000)), Prop("z", Int("Position z, or the south edge of the positions to check.", 0, 1000)), Prop("width", Int("Positions to check west to east, 1 to 20. Defaults to 1.", 1, 20)), Prop("height", Int("Positions to check south to north, 1 to 20. Defaults to 1.", 1, 20))), "def", "stuff", "rotation", "x", "z", "width", "height"),
                 Get(ToolGroups.Observe, "work", "list_work", "List work priorities, current jobs, draft state, schedules, and allowed-area context for core pawns.", "/v1/work", Input(MapId(), Detail(), Include("schedule"), Limit(), Cursor())),
                 Get(ToolGroups.Observe, "production", "list_production", "Production bills, each with a state (active, suspended, done, paused, or targetReached) and, when active, what blocks it: missingIngredients, noWorker, needsFuel, or workbenchUnusable. detail=normal adds the usable ingredients needed and available. Reserved ingredients still count.", "/v1/production", Input(MapId(), Detail(), Limit(), Cursor())),
@@ -754,6 +767,19 @@ namespace RiMCP.Shared
         private static ToolSpec Post(string group, string handlerId, string name, string description, string pathTemplate, Dictionary<string, object> inputSchema, Dictionary<string, object> annotations, string[] bodyKeys, params string[] queryKeys)
         {
             return new ToolSpec(handlerId, group, name, description, "POST", pathTemplate, queryKeys, WithLoadGuard(inputSchema, bodyKeys), WithReplyLimit(inputSchema), annotations, true);
+        }
+
+        private static Dictionary<string, object> MapViewInput()
+        {
+            const int maximumOrigin = 1000;
+            return InputWithOptionalMap(true, new string[0],
+                Prop("x", Int("West edge in game cells.", 0, maximumOrigin)),
+                Prop("z", Int("South edge in game cells.", 0, maximumOrigin)),
+                Prop("width", Int("Game cells west to east. Defaults to 32 times scale. Max 40 for unscaled grids.", 1, MapViewShape.MaxCellSpan)),
+                Prop("height", Int("Game cells south to north. Defaults to 32 times scale. Max 40 for unscaled grids.", 1, MapViewShape.MaxCellSpan)),
+                Prop("layers", J(F("type", "array"), F("items", EnumString("Extra layer.", MapViewShape.Roof, MapViewShape.Designations)))),
+                Prop("scale", Int("Game cells per grid tile side. Defaults to 1. Scaled grids have at most 48 tiles on each side.", 1, MapViewShape.MaxScale)),
+                Prop("as", EnumString("grid (default) or exact counts over the selected game cells.", MapViewShape.Grid, MapViewShape.Counts)));
         }
 
         private static string[] AddReadShape(string handler, Dictionary<string, object> schema)
