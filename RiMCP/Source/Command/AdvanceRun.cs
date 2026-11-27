@@ -62,9 +62,8 @@ namespace RiMCP.Command
         public const string Running = "running";
         public const string DialogReason = "dialog";
         public const int MaxEvents = 50;
-        // Also the order in which simultaneous events are reported.
-        public static readonly string[] Conditions = { "death", "downed", "injured", "mentalBreak", "hostiles", "lowFood", "threatLetter", "caravanRouteEnded", "letter" };
-        public static readonly string[] DefaultStopOn = { "death", "downed", "injured", "mentalBreak", "hostiles", "lowFood", "threatLetter" };
+        public static readonly string[] Conditions = AdvanceWatchers.Conditions;
+        public static readonly string[] DefaultStopOn = AdvanceWatchers.DefaultStopOn;
 
         public readonly int Id;
         public readonly string RequestId;
@@ -113,7 +112,7 @@ namespace RiMCP.Command
                 return;
             }
 
-            List<AdvanceEvent> changes = Detect(Previous, current);
+            List<AdvanceEvent> changes = AdvanceWatchers.Detect(Previous, current);
             foreach (AdvanceEvent change in changes)
             {
                 Record(change);
@@ -204,17 +203,13 @@ namespace RiMCP.Command
 
         private static string Reason(string reason)
         {
+            string summary = AdvanceWatchers.StopSummary(reason);
+            if (summary != null)
+            {
+                return summary;
+            }
             switch (reason)
             {
-                case "death": return "a death";
-                case "downed": return "a colonist down";
-                case "injured": return "an injury";
-                case "mentalBreak": return "a mental break";
-                case "hostiles": return "hostiles";
-                case "lowFood": return "low food";
-                case "threatLetter": return "a threat letter";
-                case "caravanRouteEnded": return "a caravan route ending";
-                case "letter": return "a letter";
                 case DialogReason: return "a window paused the game";
                 case "paused": return "the game was paused";
                 case "speedChanged": return "the speed was changed";
@@ -225,7 +220,7 @@ namespace RiMCP.Command
 
         private bool StopsRun(AdvanceEvent change)
         {
-            return StopOn.Contains(change.Kind) || change.Kind == "threatLetter" && StopOn.Contains("letter");
+            return StopOn.Contains(change.Kind) || AdvanceWatchers.MatchesAlias(change.Kind, StopOn);
         }
 
         private void Record(AdvanceEvent change)
@@ -238,66 +233,6 @@ namespace RiMCP.Command
             Events.Add(change);
         }
 
-        // Changes since the previous frame. Comparing frames rather than the start means a colonist
-        // who is rescued and downed again stops the run again.
-        public static List<AdvanceEvent> Detect(AdvanceObservation previous, AdvanceObservation current)
-        {
-            List<AdvanceEvent> changes = new List<AdvanceEvent>();
-            foreach (ColonistState now in current.Colonists.Values)
-            {
-                ColonistState before;
-                if (!previous.Colonists.TryGetValue(now.Id, out before) || before.Dead)
-                {
-                    continue;
-                }
-                if (now.Dead)
-                {
-                    changes.Add(PawnEvent("death", current.Tick, now, "died"));
-                    continue;
-                }
-                if (now.Downed && !before.Downed)
-                {
-                    changes.Add(PawnEvent("downed", current.Tick, now, "downed"));
-                }
-                if (now.Injuries > before.Injuries || now.Bleeding && !before.Bleeding)
-                {
-                    changes.Add(PawnEvent("injured", current.Tick, now, now.Bleeding ? "bleeding" : "new injury"));
-                }
-                if (now.MentalState != null && before.MentalState == null)
-                {
-                    changes.Add(PawnEvent("mentalBreak", current.Tick, now, now.MentalState));
-                }
-            }
-            if (current.Threat != null && previous.Threat == null)
-            {
-                changes.Add(new AdvanceEvent { Kind = "hostiles", Tick = current.Tick, Detail = current.Threat });
-            }
-            if (current.LowFood != null && previous.LowFood == null)
-            {
-                changes.Add(new AdvanceEvent { Kind = "lowFood", Tick = current.Tick, Detail = current.LowFood });
-            }
-            foreach (var caravan in previous.MovingCaravans.OrderBy(pair => pair.Key))
-            {
-                if (!current.MovingCaravans.ContainsKey(caravan.Key))
-                {
-                    changes.Add(new AdvanceEvent { Kind = "caravanRouteEnded", Tick = current.Tick,
-                        Detail = caravan.Value + " (world object " + caravan.Key + ")" });
-                }
-            }
-            foreach (LetterState letter in current.Letters.Values.OrderBy(letter => letter.Id))
-            {
-                if (!previous.Letters.ContainsKey(letter.Id))
-                {
-                    changes.Add(new AdvanceEvent { Kind = letter.Threat ? "threatLetter" : "letter", Tick = current.Tick, Detail = letter.Label });
-                }
-            }
-            return changes.OrderBy(change => Array.IndexOf(Conditions, change.Kind)).ToList();
-        }
-
-        private static AdvanceEvent PawnEvent(string kind, int tick, ColonistState pawn, string detail)
-        {
-            return new AdvanceEvent { Kind = kind, Tick = tick, PawnId = pawn.Id, PawnName = pawn.Name, Detail = detail };
-        }
     }
 
     // Owns advance runs. Everything here runs on the main thread; HTTP threads only wait on a
@@ -498,16 +433,25 @@ namespace RiMCP.Command
             observation.Tick = Find.TickManager.TicksGame;
             observation.Speed = Find.TickManager.CurTimeSpeed;
             observation.Blocking.AddRange(BlockingWindows.Names());
-            List<Pawn> pawns = new List<Pawn>();
+            AdvanceWatchers.Capture(observation);
+            return observation;
+        }
+
+        internal static void CaptureThreats(AdvanceObservation observation)
+        {
             foreach (Map map in Find.Maps)
             {
-                pawns.AddRange(map.mapPawns.FreeColonistsSpawned);
-                IAttackTarget threat;
-                if (observation.Threat == null && GenHostility.AnyHostileActiveThreatTo(map, Faction.OfPlayer, out threat))
+                if (!GenHostility.AnyHostileActiveThreatTo(map, Faction.OfPlayer, out IAttackTarget threat))
                 {
-                    observation.Threat = ThreatLabel(threat.Thing);
+                    continue;
                 }
+                observation.Threat = ThreatLabel(threat.Thing);
+                return;
             }
+        }
+
+        internal static void CaptureFood(AdvanceObservation observation)
+        {
             if (observation.Tick < foodCheckedTick || observation.Tick >= foodCheckedTick + FoodCheckInterval)
             {
                 foodCheckedTick = observation.Tick;
@@ -516,6 +460,11 @@ namespace RiMCP.Command
                 held = Find.Maps.SelectMany(map => map.mapPawns.FreeColonists).Where(pawn => !pawn.Spawned).ToList();
             }
             observation.LowFood = lowFood;
+        }
+
+        internal static void CapturePawnsAndCaravans(AdvanceObservation observation)
+        {
+            List<Pawn> pawns = Find.Maps.SelectMany(map => map.mapPawns.FreeColonistsSpawned).ToList();
             // Colonists who are not spawned: carried or in a container, on a caravan, watched since
             // they were spawned, and those who died since the last frame.
             var caravans = Find.WorldObjects.Caravans.Where(caravan => caravan.IsPlayerControlled).ToList();
@@ -531,6 +480,10 @@ namespace RiMCP.Command
             {
                 observation.Colonists[pawn.ThingID] = Colonist(pawn);
             }
+        }
+
+        internal static void CaptureLetters(AdvanceObservation observation)
+        {
             foreach (Letter letter in Find.LetterStack.LettersListForReading)
             {
                 observation.Letters[letter.ID] = new LetterState
@@ -541,7 +494,6 @@ namespace RiMCP.Command
                     Threat = letter.def != null && (letter.def == LetterDefOf.ThreatBig || letter.def == LetterDefOf.ThreatSmall)
                 };
             }
-            return observation;
         }
 
         // Labels carry rich-text markup, such as the coloured title after a raider's name.
