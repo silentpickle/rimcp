@@ -19,7 +19,7 @@ namespace RiMCP.Read
         public const string MaterialUnusable = "materialUnusable";
         public const string NoBuilder = "noBuilder";
         public const string Blocked = "blocked";
-        // An item or plant is in the way; builders haul it aside or cut it first, as the game does.
+        // Something builders clear first without an order: an item, plant, the player's own building, or rock.
         public const string Clearing = "clearing";
         public const string Forbidden = "forbidden";
 
@@ -176,10 +176,26 @@ namespace RiMCP.Read
             return builders.Able > 0 ? Ready : NoBuilder;
         }
 
-        // GenConstruct.HandleBlockingThingJob hauls items aside and cuts plants without an order.
+        // GenConstruct.HandleBlockingThingJob clears these without an order: it hauls items aside,
+        // cuts plants, deconstructs the player's own buildings, and mines rock when someone mines.
         private static bool ClearedByBuilders(Thing blocking)
         {
-            return blocking.def.EverHaulable || blocking.def.category == ThingCategory.Plant;
+            if (blocking.def.EverHaulable || blocking.def.category == ThingCategory.Plant)
+            {
+                return true;
+            }
+            Building building = blocking as Building;
+            if (building != null && building.DeconstructibleBy(Faction.OfPlayer).Accepted)
+            {
+                return true;
+            }
+            return blocking.def.mineable && AnyoneMines(blocking.Map);
+        }
+
+        private static bool AnyoneMines(Map map)
+        {
+            return map != null && map.mapPawns.FreeColonistsSpawned.Any(pawn =>
+                pawn.workSettings != null && !pawn.WorkTypeIsDisabled(WorkTypeDefOf.Mining) && pawn.workSettings.WorkIsActive(WorkTypeDefOf.Mining));
         }
 
         // Material still to deliver, per def: what is left, what is usable at the site, and what is on
