@@ -18,6 +18,12 @@ namespace RiMCP.Read
             return pawn.Downed;
         }
 
+        // Losing blood now, as the game's blood loss counts it.
+        public static bool Bleeding(Pawn pawn)
+        {
+            return pawn.health?.hediffSet != null && pawn.health.hediffSet.BleedRateTotal > 0f;
+        }
+
         public static bool UrgentlyHungry(Pawn pawn)
         {
             return pawn.needs?.food != null && pawn.needs.food.CurCategory >= HungerCategory.UrgentlyHungry;

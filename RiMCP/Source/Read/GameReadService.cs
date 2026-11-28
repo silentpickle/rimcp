@@ -160,7 +160,7 @@ namespace RiMCP.Read
         private static object MedicalSummary(IEnumerable<Pawn> core)
         {
             List<Pawn> downed = core.Where(pawn => pawn.Downed).ToList();
-            List<Pawn> bleeding = core.Where(pawn => pawn.health != null && pawn.health.hediffSet != null && pawn.health.hediffSet.hediffs.Any(hediff => hediff.Bleeding)).ToList();
+            List<Pawn> bleeding = core.Where(ColonyDangers.Bleeding).ToList();
             return Dto.Obj(
                 Dto.Field("downed", downed.Count),
                 Dto.Field("bleeding", bleeding.Count),

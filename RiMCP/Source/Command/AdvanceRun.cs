@@ -598,7 +598,7 @@ namespace RiMCP.Command
             }
             state.Downed = pawn.Downed;
             state.Idle = pawn.Spawned && !pawn.Downed && !pawn.Drafted && pawn.mindState?.IsIdle == true;
-            state.Bleeding = pawn.health.hediffSet.BleedRateTotal > 0f;
+            state.Bleeding = ColonyDangers.Bleeding(pawn);
             // Fresh injuries only: scars are permanent, and diseases needing re-tending are not new harm.
             state.Injuries = pawn.health.hediffSet.hediffs.Count(hediff => hediff is Hediff_Injury && !hediff.IsPermanent());
             state.MentalState = pawn.MentalStateDef == null ? null : ReadUtil.DefLabel(pawn.MentalStateDef);
