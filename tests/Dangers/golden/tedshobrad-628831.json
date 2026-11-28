@@ -1,0 +1,548 @@
+{
+ "get_colony_status": {
+  "data": {
+   "currentResearch": {
+    "baseCost": 600,
+    "defName": "SolarPanels",
+    "finished": false,
+    "label": "Solar panel",
+    "progress": 247.691147,
+    "tab": "Main",
+    "techLevel": "Industrial"
+   },
+   "environment": {
+    "fires": 0,
+    "freezingRooms": 0,
+    "hotRooms": 2,
+    "outdoorTemperatureC": 52.772522,
+    "weather": "Clear"
+   },
+   "food": {
+    "daysLeft": 3.5,
+    "drainNowPerDay": 6.4,
+    "eatenPerDay": 6.4,
+    "looseAllowedNutrition": {
+     "meals": 0,
+     "raw": 2.5,
+     "total": 2.5
+    },
+    "looseForbiddenNutrition": {
+     "meals": 0,
+     "raw": 0,
+     "total": 0
+    },
+    "rotsWithin": {
+     "day": 0,
+     "threeDays": 0
+    },
+    "storedNutrition": {
+     "meals": 22.5,
+     "raw": 0,
+     "total": 22.5
+    },
+    "trend": {
+     "mealsPerDay": -2.5,
+     "overHours": 34,
+     "rawPerDay": -0.7,
+     "totalPerDay": -3.2
+    }
+   },
+   "map": {
+    "biome": {
+     "defName": "TemperateForest",
+     "label": "Temperate forest"
+    },
+    "label": "Tedshobrad",
+    "mapId": "0",
+    "size": {
+     "x": 250,
+     "z": 250
+    },
+    "tile": "27607,0"
+   },
+   "medical": {
+    "bleeding": 0,
+    "downed": 0,
+    "examples": []
+   },
+   "mood": {
+    "average": 0.362199962,
+    "examples": [
+     {
+      "id": "Human643",
+      "mood": 0.185599908,
+      "name": "Satsuki Garrison"
+     },
+     {
+      "id": "Human68376",
+      "mood": 0.302000046,
+      "name": "Rrobustgala Peza"
+     }
+    ],
+    "lowMood": 2
+   },
+   "pawns": {
+    "colonist": 3,
+    "colonyAnimal": 1,
+    "core": 4,
+    "prisoner": 1,
+    "wildAnimal": 10
+   },
+   "power": {
+    "gridCount": 3,
+    "netPowerW": 800,
+    "poweredComponents": 2,
+    "poweredOff": 0,
+    "storedEnergy": 0
+   },
+   "recentEvents": [
+    {
+     "defName": "ThreatSmall",
+     "kind": "letter",
+     "label": "Mad rat",
+     "text": "A local rat has gone mad. It will attack everyone it sees."
+    },
+    {
+     "defName": "PositiveEvent",
+     "kind": "letter",
+     "label": "Psychic soothe: Female",
+     "text": "Every female colonist smiles with contentment!\n\nSome distant engine of happiness is stirring. It is projecting a psychic drone onto this site through an orbital amplifier, tuned to only affect females. For a few days, some people's mood will be quite a bit better."
+    },
+    {
+     "defName": "ThreatBig",
+     "kind": "letter",
+     "label": "Raid: The Smoky Party",
+     "text": "A group of pirates have arrived from nearby.\n\nThey are attacking immediately."
+    },
+    {
+     "defName": "NeutralEvent",
+     "kind": "letter",
+     "label": "Wild woman wanders in",
+     "text": "A person living among wild animals has wandered into the area. She's called <color=#D09B61FF>Rrobustgala</color>.\n\nYou can attempt to tame her."
+    },
+    {
+     "defName": "ThreatSmall",
+     "kind": "letter",
+     "label": "Heat wave",
+     "text": "An unusual heat wave has begun.\n\nHeat waves can induce deadly heatstroke. Stay cool by building either a passive or electric cooler, or by getting deep underground where the rocks are naturally cool."
+    }
+   ],
+   "resources": {
+    "foodTypes": 9,
+    "meals": 25,
+    "medicine": 24,
+    "storedHumanNutrition": 22.4999981,
+    "trackedTypes": 24
+   },
+   "threats": {
+    "fires": 0,
+    "hostiles": 0,
+    "manhunters": 0,
+    "predators": 0,
+    "total": 0
+   },
+   "time": {
+    "dayOfSeason": 11,
+    "hourOfDay": 17,
+    "paused": true,
+    "quadrum": "Aprimay",
+    "season": "Spring",
+    "ticksGame": 628831,
+    "timeSpeed": "Paused"
+   },
+   "topRisks": [
+    {
+     "category": "mood",
+     "code": "lowMood",
+     "count": 2,
+     "label": "Core pawns are below mental break comfort range.",
+     "nextRead": "list_pawns?filter=core&include=needs"
+    },
+    {
+     "category": "production",
+     "code": "blockedBills",
+     "count": 1,
+     "label": "Active bills cannot be done: missing ingredients, workers, fuel, or power.",
+     "nextRead": "list_production"
+    }
+   ]
+  },
+  "mapId": "0",
+  "schemaVersion": "1",
+  "tick": 628831,
+  "truncated": false
+ },
+ "get_environment": {
+  "data": {
+   "conditions": [
+    {
+     "defName": "HeatWave",
+     "durationTicks": 171164,
+     "label": "Heat wave",
+     "permanent": false,
+     "scope": "map",
+     "ticksLeft": 89333
+    }
+   ],
+   "hazards": [
+    {
+     "kind": "pollution",
+     "percent": 0
+    }
+   ],
+   "rooms": {
+    "items": [
+     {
+      "cellCount": 20,
+      "id": "room:0:110,113:Kitchen",
+      "openRoofCells": 0,
+      "role": "Kitchen",
+      "temperatureC": 55.3388329,
+      "usesOutdoorTemperature": false
+     },
+     {
+      "cellCount": 20,
+      "id": "room:0:101,113:Laboratory",
+      "openRoofCells": 0,
+      "role": "Laboratory",
+      "temperatureC": 52.7482071,
+      "usesOutdoorTemperature": false
+     },
+     {
+      "cellCount": 16,
+      "id": "room:0:117,113:PrisonBarracks",
+      "openRoofCells": 0,
+      "role": "PrisonBarracks",
+      "temperatureC": 16.7434082,
+      "usesOutdoorTemperature": false
+     }
+    ],
+    "truncated": false
+   },
+   "summary": {
+    "fires": 0,
+    "freezingRooms": 0,
+    "hotRooms": 2,
+    "outdoorTemperatureC": 52.772522,
+    "weather": "Clear"
+   },
+   "weather": {
+    "current": {
+     "defName": "Clear",
+     "label": "Clear"
+    },
+    "outdoorTemperatureC": 52.772522,
+    "season": {
+     "dayOfSeason": 11,
+     "hourOfDay": 17,
+     "paused": true,
+     "quadrum": "Aprimay",
+     "season": "Spring",
+     "ticksGame": 628831,
+     "timeSpeed": "Paused"
+    }
+   }
+  },
+  "mapId": "0",
+  "schemaVersion": "1",
+  "tick": 628831,
+  "truncated": false
+ },
+ "get_turn_digest": {
+  "data": {
+   "advance": {
+    "endReason": "completed",
+    "endTick": 628831,
+    "id": 6,
+    "recentEvents": [
+     {
+      "detail": "PowerConduit at 114,111",
+      "kind": "built",
+      "tick": 627175
+     },
+     {
+      "detail": "PowerConduit at 114,118",
+      "kind": "built",
+      "tick": 628507
+     },
+     {
+      "detail": "PowerConduit at 115,118",
+      "kind": "built",
+      "tick": 628711
+     }
+    ],
+    "startTick": 626327,
+    "status": "completed",
+    "summary": {
+     "blueprintsCompleted": 4,
+     "colonistsBecameIdle": 0,
+     "colonistsDowned": 0,
+     "newLetters": 0,
+     "research": [],
+     "researchProjectsChanged": 0,
+     "storedNutritionChange": 0
+    },
+    "targetTick": 628827
+   },
+   "blockedBy": [],
+   "food": {
+    "daysLeft": 3.5,
+    "looseAllowed": 2.5,
+    "looseForbidden": 0,
+    "low": false,
+    "stored": 22.5
+   },
+   "movers": [
+    {
+     "bearing": "N",
+     "count": 4,
+     "distance": 20,
+     "id": "wildlife-37611",
+     "job": "GotoWander",
+     "kind": "wildlife"
+    },
+    {
+     "bearing": "S",
+     "count": 1,
+     "distance": 57,
+     "id": "wildlife-56913",
+     "job": "GotoWander",
+     "kind": "wildlife"
+    },
+    {
+     "bearing": "SE",
+     "count": 1,
+     "distance": 169,
+     "id": "wildlife-46159",
+     "job": "Wait_Wander",
+     "kind": "wildlife"
+    }
+   ],
+   "paused": true,
+   "recentLetters": [
+    {
+     "def": "ThreatSmall",
+     "id": "Letter_4",
+     "label": "Heat wave"
+    },
+    {
+     "def": "NeutralEvent",
+     "id": "Letter_3",
+     "label": "Wild woman wanders in"
+    }
+   ],
+   "risks": {
+    "downed": 0,
+    "lowMood": 2,
+    "threats": {
+     "fires": 0,
+     "hostiles": 0,
+     "manhunters": 0,
+     "predators": 0,
+     "total": 0
+    },
+    "urgentlyHungry": 0
+   },
+   "speed": "Paused"
+  },
+  "mapId": "0",
+  "schemaVersion": "1",
+  "tick": 628831,
+  "truncated": false
+ },
+ "list_threats": {
+  "data": {
+   "summary": {
+    "fires": 0,
+    "hostiles": 0,
+    "manhunters": 0,
+    "predators": 0,
+    "total": 0
+   },
+   "threats": []
+  },
+  "mapId": "0",
+  "schemaVersion": "1",
+  "tick": 628831,
+  "truncated": false
+ },
+ "list_work": {
+  "data": {
+   "manualPriorities": true,
+   "pawns": [
+    {
+     "id": "Human643",
+     "job": {
+      "def": "HaulToContainer",
+      "report": "hauling steel x8 to power conduit (blueprint)."
+     },
+     "name": "Satsuki Garrison",
+     "schedule": [
+      {
+       "assignment": "Work",
+       "from": 6,
+       "to": 19
+      },
+      {
+       "assignment": "Joy",
+       "from": 19,
+       "to": 21
+      },
+      {
+       "assignment": "Anything",
+       "from": 21,
+       "to": 22
+      },
+      {
+       "assignment": "Sleep",
+       "from": 22,
+       "to": 6
+      }
+     ],
+     "work": {
+      "BasicWorker": 3,
+      "Cleaning": 4,
+      "Construction": 1,
+      "Doctor": 2,
+      "FinishingOff": 3,
+      "Firefighter": 1,
+      "Growing": 1,
+      "Hauling": 3,
+      "HaulingUrgent": 3,
+      "Hunting": 2,
+      "Patient": 1,
+      "PatientBedRest": 1,
+      "PlantCutting": 2,
+      "Research": 3
+     }
+    },
+    {
+     "id": "Human625",
+     "job": {
+      "def": "HaulToCell",
+      "report": "hauling wood x68 to Landing supplies."
+     },
+     "name": "Miriam Randolph",
+     "schedule": [
+      {
+       "assignment": "Work",
+       "from": 6,
+       "to": 19
+      },
+      {
+       "assignment": "Joy",
+       "from": 19,
+       "to": 21
+      },
+      {
+       "assignment": "Anything",
+       "from": 21,
+       "to": 22
+      },
+      {
+       "assignment": "Sleep",
+       "from": 22,
+       "to": 6
+      }
+     ],
+     "work": {
+      "BasicWorker": 3,
+      "Cleaning": 4,
+      "Construction": 1,
+      "Crafting": 3,
+      "FinishingOff": 3,
+      "Firefighter": 1,
+      "Growing": 2,
+      "Handling": 1,
+      "Hauling": 3,
+      "HaulingUrgent": 3,
+      "Mining": 4,
+      "Patient": 1,
+      "PatientBedRest": 1,
+      "PlantCutting": 2,
+      "Smithing": 4,
+      "Tailoring": 4
+     }
+    },
+    {
+     "id": "Human68376",
+     "job": {
+      "def": "GotoWander",
+      "report": "wandering."
+     },
+     "name": "Rrobustgala Peza",
+     "work": {
+      "Art": 3,
+      "BasicWorker": 3,
+      "Cleaning": 3,
+      "Construction": 3,
+      "FinishingOff": 3,
+      "Firefighter": 3,
+      "Growing": 3,
+      "Handling": 3,
+      "Hauling": 3,
+      "HaulingUrgent": 3,
+      "Patient": 3,
+      "PatientBedRest": 3,
+      "PlantCutting": 3,
+      "Warden": 3
+     }
+    },
+    {
+     "id": "Human634",
+     "job": {
+      "def": "Ingest",
+      "report": "consuming packaged survival meal."
+     },
+     "name": "Venus 'Unay' David",
+     "schedule": [
+      {
+       "assignment": "Work",
+       "from": 6,
+       "to": 19
+      },
+      {
+       "assignment": "Joy",
+       "from": 19,
+       "to": 21
+      },
+      {
+       "assignment": "Anything",
+       "from": 21,
+       "to": 22
+      },
+      {
+       "assignment": "Sleep",
+       "from": 22,
+       "to": 6
+      }
+     ],
+     "work": {
+      "BasicWorker": 3,
+      "Cleaning": 4,
+      "Construction": 1,
+      "Cooking": 1,
+      "Crafting": 3,
+      "Diplomat": 3,
+      "Doctor": 1,
+      "Firefighter": 1,
+      "Growing": 2,
+      "Hauling": 3,
+      "HaulingUrgent": 3,
+      "Patient": 1,
+      "PatientBedRest": 1,
+      "PlantCutting": 3,
+      "Research": 3,
+      "Smithing": 3,
+      "Tailoring": 3,
+      "Warden": 3
+     }
+    }
+   ]
+  },
+  "mapId": "0",
+  "schemaVersion": "1",
+  "tick": 628831,
+  "truncated": false
+ }
+}
