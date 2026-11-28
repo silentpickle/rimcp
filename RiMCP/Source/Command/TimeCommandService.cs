@@ -117,7 +117,7 @@ namespace RiMCP.Command
                     return BridgeResponse.Error(409, "The loaded game changed while waiting for the digest.");
                 }
                 return CommandEnvelope.Ok(context, created, DigestReadService.Describe(context.Map, run),
-                    DigestReadService.Budget(), detailSection: "recentLetters");
+                    DigestReadService.Budget(), detailSection: "recentLetters", priorityFields: DigestReadService.PriorityFields);
             };
             return WithWait(request, run, reply);
         }

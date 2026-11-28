@@ -31,7 +31,7 @@ namespace RiMCP.Command
 
     internal static class CommandEnvelope
     {
-        public static BridgeResponse Ok(CommandContext context, bool changed, object data, ReadRequest budget = null, string detailSection = null)
+        public static BridgeResponse Ok(CommandContext context, bool changed, object data, ReadRequest budget = null, string detailSection = null, string[] priorityFields = null)
         {
             var envelope = Dto.Obj(
                 Dto.Field("schemaVersion", "1"),
@@ -41,7 +41,7 @@ namespace RiMCP.Command
                 Dto.Field("changed", changed),
                 Dto.Field("data", data));
             BridgeResponse response = BridgeResponse.Json(200, budget == null ? Json.Serialize(envelope)
-                : ReadReplyBudget.Serialize(envelope, budget, detailSection: detailSection));
+                : ReadReplyBudget.Serialize(envelope, budget, detailSection: detailSection, priorityFields: priorityFields));
             response.Changed = changed;
             return response;
         }

@@ -8,7 +8,7 @@ Use one proxy per agent against the same game and confirm the advertised tools b
 
 - **Main** owns the clock, dialogs, and saves. Review current risks before starting `advance_time` with `untilStopped: true` and selected watchers. Request `digest: true` and follow the run ID as needed. Respect player pause requests and blocking dialogs. Send the digest and receipts to the other roles at meaningful stops.
 - **Steward** reads the assigned area and applies only delegated changes. Use a stable `requestId` on retries. Return the outcome and receipt to main.
-- **Scribe** reuses the main digest and verified save receipt. Use `get_events` with the last processed cursor on the same load. Check logs when a warning matters, note incomplete history, and start a fresh baseline after reload.
+- **Scribe** writes from main's digest and receipts while play continues. Zero live reads is normal. Preserve evidence ticks and gaps. When a missing event matters, use `get_events` with the last processed cursor on the same load.
 - **Sentinel** triages watcher stops, checks relevant threats or alerts, and escalates urgent changes with map and tick. Main owns the run and any response.
 - **Land advisor** compares candidate sites for soil, resources, access, and defensibility. Record the load, map, tick, and site constraints. Use read-only game tools.
 - **Builder** previews one approved construction assignment, reports material and placement blockers, and submits approved orders when granted the tools. Verify finished work separately from placement receipts.

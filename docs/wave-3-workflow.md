@@ -4,7 +4,9 @@
 
 Call `get_turn_digest` after an advance, or before deciding what needs attention. It gives the selected map's pause state, blocking window types, immediate risks, ranked movers, and food. Recent letters and the latest advance summarize game-wide activity. The raw bridge reply is capped at 2,048 UTF-8 bytes and accepts a smaller `maxBytes` within the usual bounds.
 
-Use `get_game_context` or `get_advance` for the full blocking interaction, `get_map_survey` for mover detail, `get_colony_status` for wider colony risks, and `get_events` for letters and messages. The digest uses the most recent advance in the current load. It can show an older run if the game has moved since that advance.
+Both `get_turn_digest` and `advance_time` with `digest: true` include blocking windows in `data.blockingDetails`. Each entry identifies the window and whether the player needs to close it. For an answerable prompt, use the interaction ID, page, and selected option ID from `dialog` with `answer_dialog`. If `budget.omittedFields` lists `blockingDetails`, use `get_game_context` or `get_advance` for the full prompt.
+
+Use `get_map_survey` for mover detail, `get_colony_status` for wider colony risks, and `get_events` for letters and messages. The digest uses the most recent advance in the current load. It can show an older run if the game has moved since that advance.
 
 ## Follow changes to a particular read
 
@@ -30,6 +32,18 @@ The November 27 isolated RimWorld 1.6.4871 trial produced raw replies of 839 byt
 Start `advance_time` with `untilStopped: true` and omit `hours` to watch until a selected event, manual time control, access loss, a blocking window, or a game change. With `hours`, the clock also has a finite endpoint. A run needs a time limit or at least one watcher. Calls with `digest: true` return the compact turn view and put the run ID and status under `data.advance`. The raw command reply has a 2 KiB cap. Use `get_advance` for the full timeline and dialog options.
 
 A `waitSeconds` timeout returns the current state and leaves the run in place. While it runs, send reads or orders through the same bridge. One run owns time per loaded game. Pause with `set_game_speed` when you need manual control. Read the current risks before starting a run because watchers are triggered by changes.
+
+## Verify dialogues and asynchronous stops
+
+The Tedshobrad trial on the installed dialogue build verified a player-only faction and settlement naming window in `data.blockingDetails`. The compact reply reported `needsPlayer: true`; the game UI supplied the generated names and OK button. Live acceptance of the new compact fields for an MCP-answerable window remains open. The previous build accepted a Hospitality choice using the full dialog reply. The compact budget regression covers a fitting prompt, a prompt competing with long advance history, and an oversized prompt with explicit omission. [Trial and next-agent prompt](../../rimworld/colonies/coordination-test/handoffs/2026-11-27-dialogue-trial.md)
+
+Use a disposable research-completion fixture for a supported OK, and a disposable mod prompt for a multi-choice case. Verify the loaded DLL hash, proxy discovery and tool schemas first. Exercise the compact command reply when the bounded wait returns after the stop. If the first reply is still running, follow the run with `get_advance` and replay the original `advance_time` request ID and arguments to sample the same run in compact form. Confirm the full prompt, option IDs, page and interaction ID against current context. Use a fresh request ID for the intended answer, then test retry and stale page or load handling. Confirm whether the game remains paused and record the outcome and ticks. Record an explicit fallback read whenever the 2 KiB reply omits the choices.
+
+Proposed follow-ups:
+
+- Extend the adapter for `Dialog_NamePlayerFactionAndSettlement` with the current generated names and an explicit accept-current-names option. Use the native validation path and keep the player-only fallback when the window cannot be driven.
+- Add an opt-in compact mode to `get_advance` for asynchronous callers. The stop reason and tick describe the run, while live blocking details describe the response time. Preserve that distinction when a prompt changes or clears. Keep the existing full response as the default.
+- Report calls, raw reply bytes and elapsed time per decision. Capture retries and failures, and label setup and save-verification traffic separately. The trial's 95,191 raw reply bytes across 90 successful main calls describe the whole session and cannot isolate the cost of dialog handling.
 
 ## Plan on the map
 

@@ -7,6 +7,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
@@ -412,6 +413,7 @@ internal static partial class Program
         Test("L2_page_cursor", CheckPageReplyBudget);
         Test("L2_oversized_row", CheckNestedReplyBudget);
         Test("L2_byte_boundary", CheckExactReplyBudget);
+        Test("L2_digest_blocking_decisions", CheckDigestBlockingDecisions);
         Test("L4 revisions address projected rows and reset across loads, selectors and byte limits", CheckReadRevisions);
         Console.WriteLine(passed + " passed; " + failed + " failed.");
         return failed == 0 ? 0 : 1;
@@ -489,6 +491,48 @@ internal static partial class Program
         Check(Rows(budget["omittedFields"]).Cast<string>().SequenceEqual(new[] { "value" }), "name the omitted section");
     }
 
+    private static void CheckDigestBlockingDecisions()
+    {
+        var dialog = new Dictionary<string, object>
+        {
+            { "interactionId", "dialog-7" }, { "page", 11 }, { "title", "Visitors from Xigoba Coalition" },
+            { "question", "No guest beds. " + new string('é', 160) }, { "canCancel", false },
+            { "options", new[] { new Dictionary<string, object>
+                { { "id", "3" }, { "text", "Refuse visitors until I have guest beds" } } } }
+        };
+        var fields = new Dictionary<string, object>
+        {
+            { "paused", true }, { "blockedBy", new[] { "Dialog_NodeTree" } },
+            { "blockingDetails", new[] { new Dictionary<string, object>
+                { { "window", "Dialog_NodeTree" }, { "needsPlayer", false }, { "dialog", dialog } } } },
+            { "advance", new Dictionary<string, object> { { "status", "interrupted" }, { "endReason", "error: observer failed" } } },
+            { "movers", new string('x', 500) }, { "recentLetters", new string('x', 1500) }
+        };
+        var source = new Dictionary<string, object> { { "data", fields } };
+        var priorities = (string[])mod.GetType("RiMCP.Read.DigestReadService", true).GetField("PriorityFields", Static).GetValue(null);
+
+        string body = BudgetedReply(source, 2048, detailSection: "recentLetters", priorityFields: priorities);
+        var reply = Json.Deserialize<Dictionary<string, object>>(body);
+        var kept = Data(reply);
+        Check(Encoding.UTF8.GetByteCount(body) <= 2048 && (bool)reply["truncated"], "apply the digest's UTF-8 byte cap");
+        Check(kept.ContainsKey("blockingDetails") && kept.ContainsKey("advance"), "retain the full prompt and run failure ahead of recent letters");
+
+        var advance = (Dictionary<string, object>)fields["advance"];
+        advance["recentEvents"] = new string('x', 1450);
+        body = BudgetedReply(source, 2048, detailSection: "recentLetters", priorityFields: priorities);
+        reply = Json.Deserialize<Dictionary<string, object>>(body);
+        Check(Data(reply).ContainsKey("blockingDetails") && !Data(reply).ContainsKey("advance"),
+            "keep the decision when a long advance summary and the prompt cannot both fit");
+
+        advance.Remove("recentEvents");
+        dialog["question"] = new string('é', 1400);
+        body = BudgetedReply(source, 2048, detailSection: "recentLetters", priorityFields: priorities);
+        reply = Json.Deserialize<Dictionary<string, object>>(body);
+        var budget = (Dictionary<string, object>)reply["budget"];
+        Check(Encoding.UTF8.GetByteCount(body) <= 2048 && Data(reply).ContainsKey("blockedBy"), "keep the window name when the full prompt does not fit");
+        Check(Data(reply).ContainsKey("advance") && Rows(budget["omittedFields"]).Contains("blockingDetails"), "report the omitted prompt explicitly");
+    }
+
     private static void CheckReadRevisions()
     {
         string Read(string load, string query, string[] ids, string[] rows)
@@ -525,11 +569,12 @@ internal static partial class Program
         Check((bool)otherLoad["reset"] && !otherLoad.ContainsKey("delta"), "a revision from another load starts over");
     }
 
-    private static string BudgetedReply(Dictionary<string, object> source, int maxBytes, string field = null)
+    private static string BudgetedReply(Dictionary<string, object> source, int maxBytes, string field = null,
+        string detailSection = null, string[] priorityFields = null)
     {
         var uri = new Uri("http://localhost/v1/example?cursor=" + FirstCursor + "&maxBytes=" + maxBytes);
         object request = Invoke("RiMCP.Read.ReadRequest", "FromUri", uri);
-        return (string)Invoke("RiMCP.Read.ReadReplyBudget", "Serialize", source, request, field, null);
+        return (string)Invoke("RiMCP.Read.ReadReplyBudget", "Serialize", source, request, field, detailSection, priorityFields);
     }
 
     private static ResearchProjectDef Project(string name)

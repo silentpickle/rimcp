@@ -27,7 +27,12 @@ namespace RiMCP.Command
         // Hands each blocking window answer_dialog can drive to it, once; the rest need the player.
         public static void Adopt()
         {
-            foreach (Window window in Now().Where(each => !Interactions.Owns(each)))
+            Adopt(Now());
+        }
+
+        private static void Adopt(List<Window> windows)
+        {
+            foreach (Window window in windows.Where(each => !Interactions.Owns(each)))
             {
                 DialogAdapter dialog = DialogAdapter.For(window);
                 if (dialog == null)
@@ -42,12 +47,16 @@ namespace RiMCP.Command
         // Null when nothing blocks the clock, so callers can omit the field.
         public static object[] Describe()
         {
-            List<Window> windows = Now();
+            return Describe(Now());
+        }
+
+        internal static object[] Describe(List<Window> windows)
+        {
             if (windows.Count == 0)
             {
                 return null;
             }
-            Adopt();
+            Adopt(windows);
             return windows.Select(DescribeOne).ToArray();
         }
 

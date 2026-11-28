@@ -508,8 +508,8 @@ impl Proxy {
             Some("land-advisor") => "Survey land and compare candidate sites using bounded reads. Record load, map, tick, and site constraints. Keep the survey read-only in game.",
             Some("builder") => "Preview an assigned build, report blockers, and place only approved orders. Report what was queued and verify completion separately.",
             Some("researcher") => "Answer a specific game or research question using loaded definitions and versioned references. Report prerequisites and evidence to main, who selects the project.",
-            Some("scribe") => "Reuse the main digest and save receipt. Read incremental events with a cursor and sample logs only when relevant.",
-            _ => "For multi-agent play, give main control of time, steward bounded orders, and scribe checkpoint reads. Share the digest instead of polling the whole map independently.",
+            Some("scribe") => "Write from main's digest and receipts; zero live reads is normal. Keep each observation's tick and note gaps while main keeps playing. Read events or logs only to fill a material gap.",
+            _ => "Main owns play and shares evidence with passive maintenance roles. Specialists make targeted reads when needed and change the game only for an explicitly assigned action.",
         };
         let base = if self.allowed_tools.is_some() {
             SCOPED_INSTRUCTIONS
@@ -1446,7 +1446,7 @@ mod tests {
         let init = request("initialize", json!({}));
         assert_eq!(init["result"]["capabilities"]["resources"], json!({}));
         let instructions = init["result"]["instructions"].as_str().unwrap();
-        assert!(instructions.contains("Reuse the main digest"));
+        assert!(instructions.contains("zero live reads is normal"));
         assert!(instructions.contains(GUIDE_URI));
         assert!(!instructions.contains("Start with get_game_context"));
 

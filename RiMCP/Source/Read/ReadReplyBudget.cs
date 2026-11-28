@@ -10,11 +10,11 @@ namespace RiMCP.Read
 {
     internal static class ReadReplyBudget
     {
-        public static string Serialize(Dictionary<string, object> envelope, ReadRequest request, string pageField = null, string detailSection = null)
+        public static string Serialize(Dictionary<string, object> envelope, ReadRequest request, string pageField = null, string detailSection = null, string[] priorityFields = null)
         {
             int maxBytes = MaxBytes(request);
             string body = Json.Serialize(envelope);
-            return Fits(body, maxBytes) ? body : new CappedReply(envelope, maxBytes, pageField).Fit(request.Cursor, detailSection);
+            return Fits(body, maxBytes) ? body : new CappedReply(envelope, maxBytes, pageField).Fit(request.Cursor, detailSection, priorityFields);
         }
 
         internal static int MaxBytes(ReadRequest request)
@@ -61,7 +61,7 @@ namespace RiMCP.Read
                 envelope["budget"] = budget;
             }
 
-            public string Fit(int cursor, string detailSection)
+            public string Fit(int cursor, string detailSection, string[] priorityFields)
             {
                 string body = OmitDetail(detailSection);
                 if (body != null && Fits(body, maxBytes))
@@ -73,7 +73,7 @@ namespace RiMCP.Read
                 body = Json.Serialize(envelope);
                 if (!Fits(body, maxBytes))
                 {
-                    body = FitFields();
+                    body = FitFields(priorityFields);
                 }
                 return page == null || page.Rows.Length == 0 || !envelope.ContainsKey(DataField) ? body : FitPage(cursor, body);
             }
@@ -108,11 +108,11 @@ namespace RiMCP.Read
                 return Json.Serialize(envelope);
             }
 
-            private string FitFields()
+            private string FitFields(string[] priorityFields)
             {
                 if (data != null)
                 {
-                    foreach (string key in FieldsBySize())
+                    foreach (string key in FieldsBySize(priorityFields))
                     {
                         data.Remove(key);
                         omittedFields.Add(key);
@@ -131,10 +131,12 @@ namespace RiMCP.Read
                 return Json.Serialize(envelope);
             }
 
-            private string[] FieldsBySize()
+            private string[] FieldsBySize(string[] priorityFields)
             {
                 return data.Where(field => field.Value != null && (page == null || field.Key != pageField))
-                    .OrderByDescending(field => Encoding.UTF8.GetByteCount(Json.Serialize(field.Value)))
+                    .Select(field => new { field.Key, Bytes = Encoding.UTF8.GetByteCount(Json.Serialize(field.Value)) })
+                    .OrderBy(field => priorityFields == null || field.Bytes >= maxBytes ? -1 : Array.IndexOf(priorityFields, field.Key))
+                    .ThenByDescending(field => field.Bytes)
                     .Select(field => field.Key)
                     .ToArray();
             }

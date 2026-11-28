@@ -217,7 +217,7 @@ namespace RiMCP.Read
         public object Data;
 
         public static BridgeResponse Ok(ReadContext context, object data, bool truncated = false, int? nextCursor = null, string pageField = null, string detailSection = null,
-            string revisionScope = null, IEnumerable<string> rowIds = null)
+            string revisionScope = null, IEnumerable<string> rowIds = null, string[] priorityFields = null)
         {
             ReadEnvelope envelope = new ReadEnvelope
             {
@@ -230,7 +230,7 @@ namespace RiMCP.Read
             var dto = envelope.ToDto();
             string revised = revisionScope == null ? null :
                 ReadRevisions.TrySerialize(context.Request, dto, revisionScope, (Dictionary<string, object>)data, pageField, rowIds);
-            return BridgeResponse.Json(200, revised ?? ReadReplyBudget.Serialize(dto, context.Request, pageField, detailSection));
+            return BridgeResponse.Json(200, revised ?? ReadReplyBudget.Serialize(dto, context.Request, pageField, detailSection, priorityFields));
         }
 
         private Dictionary<string, object> ToDto()

@@ -12,13 +12,15 @@ namespace RiMCP.Read
     internal static class DigestReadService
     {
         private const int DigestBytes = 2048;
+        // Lowest to highest retention priority, after ordinary digest fields.
+        internal static readonly string[] PriorityFields = { "advance", "blockingDetails", "blockedBy", "paused" };
 
         public static BridgeResponse GetTurnDigest(BridgeRequest request, RouteMatch route)
         {
             ReadContext context = ReadContext.FromMap(request);
             int maxBytes = Math.Min(DigestBytes, ReadReplyBudget.MaxBytes(context.Request));
             context.Request.Query[ReplyLimits.Argument] = maxBytes.ToString(CultureInfo.InvariantCulture);
-            return ReadEnvelope.Ok(context, Describe(context.Map, AdvanceRunner.LatestInLoadedGame), detailSection: "recentLetters");
+            return ReadEnvelope.Ok(context, Describe(context.Map, AdvanceRunner.LatestInLoadedGame), detailSection: "recentLetters", priorityFields: PriorityFields);
         }
 
         internal static ReadRequest Budget()
@@ -34,10 +36,12 @@ namespace RiMCP.Read
             IntVec3 origin = colonists.Length == 0 ? map?.Center ?? IntVec3.Invalid : SurveyGeometry.Centre(colonists);
             var movers = map == null ? null : new SurveyMovers(map, origin, colonists);
             TickManager clock = Find.TickManager;
+            var windows = BlockingWindows.Now();
             return Dto.Obj(
                 Dto.Field("paused", clock.Paused),
                 Dto.Field("speed", clock.CurTimeSpeed.ToString()),
-                Dto.Field("blockedBy", BlockingWindows.Names().Take(3).Select(Bounded).ToArray()),
+                Dto.Field("blockedBy", windows.Take(3).Select(window => Bounded(window.GetType().Name)).ToArray()),
+                Dto.Field("blockingDetails", BlockingWindows.Describe(windows)),
                 Dto.Field("risks", map == null ? null : Dto.Obj(
                     Dto.Field("downed", core.Count(pawn => pawn.Downed)),
                     Dto.Field("urgentlyHungry", core.Count(pawn =>
@@ -74,6 +78,7 @@ namespace RiMCP.Read
                 Dto.Field("startTick", run.StartTick),
                 Dto.Field("targetTick", run.TargetTick),
                 Dto.Field("endTick", run.EndTick < 0 ? (int?)null : run.EndTick),
+                Dto.Field("droppedEvents", run.DroppedEvents > 0 ? (int?)run.DroppedEvents : null),
                 Dto.Field("summary", run.Summary.Describe(researchLimit: 2)),
                 Dto.Field("recentEvents", run.Events.Skip(Math.Max(0, run.Events.Count - 3)).Select(change => Dto.Obj(
                     Dto.Field("kind", change.Kind),
