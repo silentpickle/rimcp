@@ -191,6 +191,7 @@ namespace RiMCP.Read
                 dto["queuedJobs"] = queuedJobs;
             }
             dto["ideoligion"] = IdeoligionReadService.SerializePawnIdeoligionSummary(pawn);
+            dto["prisoner"] = PawnDetails.Prisoner(pawn);
 
             if (detail != ReadDetail.Summary || request.Wants("needs") || request.Wants("thoughts"))
             {
@@ -205,6 +206,8 @@ namespace RiMCP.Read
             {
                 dto["skills"] = SerializeSkills(pawn);
                 dto["traits"] = SerializeTraits(pawn);
+                dto["backstory"] = PawnDetails.Backstory(pawn);
+                dto["incapable"] = PawnDetails.Incapable(pawn);
             }
             // The assignments carry the schedule too, so it is sent once.
             bool assignments = detail == ReadDetail.Full || request.Wants("assignments");
@@ -232,6 +235,7 @@ namespace RiMCP.Read
             if (detail == ReadDetail.Full || request.Wants("relations"))
             {
                 dto["relations"] = SerializeRelations(pawn);
+                dto["opinions"] = PawnDetails.Opinions(pawn);
             }
             return dto;
         }
@@ -305,16 +309,7 @@ namespace RiMCP.Read
 
             if (detail == ReadDetail.Full)
             {
-                List<object> thoughts = new List<object>();
-                MemoryThoughtHandler memories = pawn.needs.mood.thoughts == null ? null : pawn.needs.mood.thoughts.memories;
-                foreach (Thought_Memory memory in memories == null ? Enumerable.Empty<Thought_Memory>() : memories.Memories)
-                {
-                    thoughts.Add(Dto.Obj(
-                        Dto.Field("defName", memory.def == null ? null : memory.def.defName),
-                        Dto.Field("label", memory.LabelCap),
-                        Dto.Field("moodOffset", memory.MoodOffset())));
-                }
-                mood["thoughts"] = thoughts;
+                mood["thoughts"] = PawnDetails.SerializeMoodThoughts(pawn);
             }
             return mood;
         }
@@ -657,12 +652,28 @@ namespace RiMCP.Read
             {
                 foreach (Apparel thing in pawn.apparel.WornApparel)
                 {
-                    apparel.Add(ThingSummary(thing));
+                    apparel.Add(ApparelSummary(thing));
                 }
             }
             return Dto.Obj(
                 Dto.Field("equipment", equipment),
-                Dto.Field("apparel", apparel));
+                Dto.Field("apparel", apparel),
+                Dto.Field("temperature", PawnDetails.TemperatureRanges(pawn)));
+        }
+
+        private static object ApparelSummary(Apparel apparel)
+        {
+            var dto = (Dictionary<string, object>)ThingSummary(apparel);
+            string condition = PawnDetails.Condition(apparel);
+            if (condition != null)
+            {
+                dto["condition"] = condition;
+            }
+            if (apparel.WornByCorpse)
+            {
+                dto["wornByCorpse"] = true;
+            }
+            return dto;
         }
 
         public static object SerializeInventory(Pawn pawn)

@@ -9,6 +9,8 @@ namespace RiMCP.Read
     internal sealed class DangerSnapshot
     {
         private const int MaxExamples = 5;
+        // The biggest mood penalties named for each pawn near a break.
+        private const int MaxCauses = 3;
 
         private sealed class Harmed
         {
@@ -139,7 +141,9 @@ namespace RiMCP.Read
             {
                 rows.Add(Row("mood", "breakRisk", breakRisk[0].Level, "Core pawns are near a mental break by the game's own thresholds for each pawn.",
                     breakRisk.Count, "list_pawns?filter=core&include=needs",
-                    breakRisk.Take(MaxExamples).Select(entry => PawnExample(entry.Pawn, Dto.Field("breakRisk", ColonyDangers.LevelName(entry.Level))))));
+                    breakRisk.Take(MaxExamples).Select(entry => PawnExample(entry.Pawn,
+                        Dto.Field("breakRisk", ColonyDangers.LevelName(entry.Level)),
+                        Dto.Field("causes", PawnDetails.TopPenalties(entry.Pawn, MaxCauses))))));
             }
             if (harmed.Count > 0)
             {

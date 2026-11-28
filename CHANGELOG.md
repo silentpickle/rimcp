@@ -14,6 +14,7 @@ All notable changes to this project are documented in this file.
 
 - One danger model. The digest, `get_colony_status` and the new `dangers` list in `list_threats` read the same snapshot. New dangers: mental break risk by each pawn's own game thresholds (`breakRisk`, minor/major/extreme); heatstroke and hypothermia by stage (`temperatureHarm`), and pawns outside their safe temperature (`unsafeTemperature`); vital work needed now that nobody up and free can do (`uncoveredWork`: firefighting, doctoring, cooking, harvesting); manhunters and hunting predators, and fires, in `topRisks`. Rows carry a `severity` and sort worst first.
 - `advance_time` stop conditions `breakRisk` (a pawn reaches extreme break risk) and `temperature` (heatstroke or hypothermia reaches the serious stage), both on by default.
+- `get_pawn` covers the inspector's tabs: `thoughts` lists every mood thought grouped as the Needs tab shows them, situational ones included; `relations` adds `opinions` both ways; `gear` adds frayed or tattered apparel and the safe and comfortable temperature ranges; the pawn gives its `backstory`, the work it can never do (`incapable`), and for a prisoner its interaction mode, resistance and will. Pawns at break risk carry their top mood penalties as `causes` in `list_threats` dangers and colony status.
 - `list_work` sweep rows mark `patient: true` for a pawn in bed rest and give its `breakRisk`. The digest's food gives `meals` and `raw` beside `stored`.
 
 ### Changed

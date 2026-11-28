@@ -12,6 +12,7 @@ namespace RiMCP.Read
     internal static class GameReadService
     {
         private const int MaxMoodExamples = 5;
+        private const int MaxMoodCauses = 3;
         // Kept longest when the reply is over budget: the dangers are what the dashboard is for.
         private static readonly string[] StatusPriorityFields = { "topRisks" };
 
@@ -183,7 +184,8 @@ namespace RiMCP.Read
                     Dto.Field("id", ReadUtil.ThingId(pawn)),
                     Dto.Field("name", ReadUtil.PawnName(pawn)),
                     Dto.Field("mood", pawn.needs.mood.CurLevelPercentage),
-                    Dto.Field("breakRisk", ColonyDangers.LevelName(dangers.BreakRiskOf(pawn))))).ToArray()));
+                    Dto.Field("breakRisk", ColonyDangers.LevelName(dangers.BreakRiskOf(pawn))),
+                    Dto.Field("causes", PawnDetails.TopPenalties(pawn, MaxMoodCauses)))).ToArray()));
         }
 
         // The colony's dangers, then blocked bills, worst first.

@@ -17,6 +17,12 @@ internal static partial class Program
     private const float ExtremeHarm = 0.62f;
     private const int DangerStart = 100;
     private const int DangerFrame = DangerStart + 10;
+    private const float Tattered = 0.19f;
+    private const float TatteredEdge = 0.2f;
+    private const float FrayedEdgeBelow = 0.49f;
+    private const float FrayedEdge = 0.5f;
+    private const float SwelteringOffset = -12f;
+    private const int StackedCount = 3;
 
     private static void RegisterDangerChecks()
     {
@@ -24,6 +30,8 @@ internal static partial class Program
         Test("T2_harm_stages", CheckHarmStages);
         Test("T3_danger_stops", CheckDangerStops);
         Test("T4_danger_order", CheckDangerOrder);
+        Test("T5_apparel_wear", CheckApparelWear);
+        Test("T6_cause_text", CheckCauseText);
     }
 
     private static Type DangerLevelType()
@@ -111,5 +119,30 @@ internal static partial class Program
         Check(order == "extreme majorA majorB minorFirst", "dangers sort worst first and keep their order within a level: " + order);
         Dictionary<string, object> first = sorted.Cast<Dictionary<string, object>>().First();
         Check((string)first["severity"] == "extreme" && !first.ContainsKey("examples"), "a row names its severity and leaves out empty examples");
+    }
+
+    private static void CheckApparelWear()
+    {
+        MethodInfo at = mod.GetType("RiMCP.Read.PawnDetails", true).GetMethod("ConditionAt", Static);
+        Func<float, string> condition = fraction => (string)at.Invoke(null, new object[] { fraction });
+        Check(condition(Tattered) == "tattered", "below a fifth of its hit points apparel is tattered");
+        Check(condition(TatteredEdge) == "frayed", "at a fifth it is frayed, not tattered");
+        Check(condition(FrayedEdgeBelow) == "frayed", "below half it is frayed");
+        Check(condition(FrayedEdge) == null, "at half the wearer does not mind");
+    }
+
+    private static void CheckCauseText()
+    {
+        Type thought = mod.GetType("RiMCP.Read.PawnDetails+MoodThought", true);
+        Func<string, float, int, string> describe = (label, mood, count) =>
+        {
+            object value = Activator.CreateInstance(thought, true);
+            thought.GetField("Label").SetValue(value, label);
+            thought.GetField("Mood").SetValue(value, mood);
+            thought.GetField("Count").SetValue(value, count);
+            return (string)thought.GetMethod("Describe").Invoke(value, null);
+        };
+        Check(describe("Sweltering hot", SwelteringOffset, 1) == "Sweltering hot -12", "a cause reads as its label and signed mood: " + describe("Sweltering hot", SwelteringOffset, 1));
+        Check(describe("Ate without table", SwelteringOffset, StackedCount) == "Ate without table x3 -12", "a stacked thought names its count");
     }
 }
