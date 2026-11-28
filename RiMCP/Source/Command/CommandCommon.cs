@@ -150,6 +150,15 @@ namespace RiMCP.Command
             }
         }
 
+        // As the game's Hunt and Tame designators accept: animals and wild people.
+        public static void RequireAnimalOrWildPerson(Pawn pawn)
+        {
+            if (pawn == null || !pawn.AnimalOrWildMan())
+            {
+                throw new CommandException(409, "Pawn is neither an animal nor a wild person.");
+            }
+        }
+
         public static void RequireColonyAnimal(Pawn pawn)
         {
             if (pawn == null || !pawn.IsColonyAnimal)

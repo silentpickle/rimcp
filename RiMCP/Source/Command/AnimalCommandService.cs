@@ -23,7 +23,7 @@ namespace RiMCP.Command
             Pawn pawn = CommandUtil.ResolveSpawnedPawn(context, pawnId);
             string animalOrder = action == "none" ? "Clear the orders on " + AgentLog.Name(pawn) : "Mark " + AgentLog.Name(pawn) + " to " + action;
             AgentLog.About(animalOrder, pawn);
-            CommandUtil.RequireAnimal(pawn);
+            CommandUtil.RequireAnimalOrWildPerson(pawn);
 
             DesignationDef target = DesignationForAction(action);
             ValidateDesignationAction(context.Map, pawn, action);
