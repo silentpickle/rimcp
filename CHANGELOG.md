@@ -12,8 +12,18 @@ All notable changes to this project are documented in this file.
 - The built-in getting-started guide (`rimcp://guide/getting-started`) has a short colony-care checklist: work, schedules and areas, food kinds, temperature, mood, and stalled work.
 - `get_construction`: one verdict per outstanding blueprint or frame (`building`, `ready`, `clearing`, `needsMaterial`, `materialUnusable`, `blocked`, `forbidden`, `noBuilder`), with counts by verdict and material shortfalls across every site. Material is counted as usable at the site and on the map, so forbidden or unreachable stock no longer looks available. Builder refusals come from the game's own `GenConstruct.CanConstruct`.
 
+- One danger model. The digest, `get_colony_status` and the new `dangers` list in `list_threats` read the same snapshot. New dangers: mental break risk by each pawn's own game thresholds (`breakRisk`, minor/major/extreme); heatstroke and hypothermia by stage (`temperatureHarm`), and pawns outside their safe temperature (`unsafeTemperature`); vital work needed now that nobody up and free can do (`uncoveredWork`: firefighting, doctoring, cooking, harvesting); manhunters and hunting predators, and fires, in `topRisks`. Rows carry a `severity` and sort worst first.
+- `advance_time` stop conditions `breakRisk` (a pawn reaches extreme break risk) and `temperature` (heatstroke or hypothermia reaches the serious stage), both on by default.
+- `list_work` sweep rows mark `patient: true` for a pawn in bed rest and give its `breakRisk`. The digest's food gives `meals` and `raw` beside `stored`.
+
+### Changed
+
+- `lowMood` (a fixed 0.35 mood cutoff) is replaced by `breakRisk` in the digest, `topRisks` and the colony status mood block. `hostilesPresent` now counts only visible hostiles, as `list_threats` does.
+
 ### Fixed
 
+- `get_map_survey` counted a predator hunting wildlife as an animal threat; it now matches `list_threats`, which counts only predators hunting the colony's people or animals.
+- `get_colony_status` and the `injured` stop condition used different tests for bleeding; both now use the total bleed rate.
 - `designate_animal` refused wild people ("Pawn is not an animal"), although the game's Tame and Hunt designators accept them. A wild person can now be marked to tame or hunt under the same checks.
 - `get_construction` called a site `blocked` when the colony's own building (such as the wall a cooler replaces) or mineable rock was in the way. Builders clear both without an order, so these now read `clearing`.
 

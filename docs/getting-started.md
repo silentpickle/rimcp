@@ -16,13 +16,15 @@ Use one proxy per agent against the same game and confirm the advertised tools b
 
 ## Keep the colony alive
 
+Dangers are defined once. The digest's `risks` count them, `get_colony_status` `topRisks` and `list_threats` `dangers` list them worst first with examples and what to read next, and the `breakRisk` and `temperature` stop conditions pause a run when one turns serious.
+
 At each checkpoint, check the few settings that decide survival, and fix them before turning to projects:
 
-- **Work.** Turn on manual priorities once roles differ (a 1–4 priority does it) and match each pawn's work to skills and current health. A pawn in bed rest does no work, so make sure someone who is up covers vital work such as growing, cooking, doctoring and building. `list_work` with `sweep: true` shows each pawn's job, priorities and schedule in about 1 KB.
+- **Work.** Turn on manual priorities once roles differ (a 1–4 priority does it) and match each pawn's work to skills and current health. A pawn in bed rest does no work; the sweep marks it `patient`, and the `uncoveredWork` danger names vital work (firefighting, doctoring, cooking, harvesting) that is needed now and that nobody up and free can do. `list_work` with `sweep: true` shows each pawn's job, priorities and schedule in about 1 KB.
 - **Schedules and allowed areas.** Keep sleep, work and recreation blocks, and use allowed areas to keep pawns out of danger (indoors during a raid or heat wave) or apart from each other.
 - **Food and animals.** Watch stored days and the kind of food. Cooking every crop leaves no raw food, and taming, including wild people, needs raw food. Check pets and pens.
-- **Temperature, rooms and health.** During a heat wave or cold snap, read room temperatures with `get_environment` and pawns' heatstroke or hypothermia. Coolers need power and a conduit.
-- **Mood.** `lowMood` uses a fixed cutoff; `get_events` alerts name pawns at the game's own minor or major break risk.
+- **Temperature, rooms and health.** The `temperatureHarm` danger names heatstroke or hypothermia and its stage, and `unsafeTemperature` counts pawns standing somewhere hotter or colder than they can take, before harm starts. Read rooms with `get_environment`. Coolers need power and a conduit.
+- **Mood.** `breakRisk` uses each pawn's own minor, major and extreme break thresholds from the game. `get_pawn` with `include: ["thoughts"]` shows why.
 - **Stalled work.** Before changing priorities, ask why: `get_construction` separates missing or unusable material, obstacles builders clear themselves, and missing builders. A pawn's right-click menu (`list_pawn_actions`) gives the game's reason for a refused job, such as "Not enough food".
 
 The host starts and coordinates the agents. Prefer one watcher-driven run and shared evidence over repeated whole-map polling by each role. Reads and delegated orders can run while the clock is moving when the game permits them.
