@@ -164,6 +164,7 @@ internal static partial class Program
         Test("W1B_watch_limit", CheckAdvanceWatcherLimit);
         Test("W2_advance_summary", CheckAdvanceSummary);
         RegisterHarnessFollowUpChecks();
+        RegisterDangerChecks();
         Test("advance runs complete at the target and end on outside changes", () =>
         {
             object game = new object();

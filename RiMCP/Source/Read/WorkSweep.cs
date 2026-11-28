@@ -61,6 +61,8 @@ namespace RiMCP.Read
                 Dto.Field("name", ReadUtil.PawnName(pawn)),
                 Dto.Field("drafted", pawn.Drafted ? (bool?)true : null),
                 Dto.Field("downed", pawn.Downed ? (bool?)true : null),
+                Dto.Field("patient", ColonyDangers.IsPatient(pawn) ? (bool?)true : null),
+                Dto.Field("breakRisk", ColonyDangers.LevelName(ColonyDangers.BreakRisk(pawn))),
                 Dto.Field("job", Job(pawn)),
                 Dto.Field("work", Work(pawn, chosen)),
                 Dto.Field("incapable", Incapable(pawn, chosen)),

@@ -38,7 +38,7 @@ namespace RiMCP.Read
             var movers = map == null ? null : new SurveyMovers(map, origin, colonists);
             TickManager clock = Find.TickManager;
             var windows = BlockingWindows.Now();
-            ColonyDangers.PawnCounts dangers = ColonyDangers.PawnCounts.Of(core);
+            DangerSnapshot dangers = map == null ? null : DangerSnapshot.Of(map, core, food);
             return Dto.Obj(
                 Dto.Field("paused", clock.Paused),
                 Dto.Field("speed", clock.CurTimeSpeed.ToString()),
@@ -47,11 +47,15 @@ namespace RiMCP.Read
                 Dto.Field("risks", map == null ? null : Dto.Obj(
                     Dto.Field("downed", dangers.Downed),
                     Dto.Field("urgentlyHungry", dangers.UrgentlyHungry),
-                    Dto.Field("lowMood", dangers.LowMood),
-                    Dto.Field("threats", ThreatReadService.SummarizeThreats(map)))),
+                    Dto.Field("breakRisk", dangers.BreakRiskCounts()),
+                    Dto.Field("temperature", dangers.TemperatureSummary()),
+                    Dto.Field("uncoveredWork", dangers.WorkGapNames()),
+                    Dto.Field("threats", dangers.Threats.ToDto()))),
                 Dto.Field("food", food == null ? null : Dto.Obj(
-                    Dto.Field("low", ColonyDangers.LowFood(map, food.Stored.Total)),
+                    Dto.Field("low", dangers.LowFood),
                     Dto.Field("stored", Math.Round(food.Stored.Total, 1)),
+                    Dto.Field("meals", Math.Round(food.Stored.Meals, 1)),
+                    Dto.Field("raw", Math.Round(food.Stored.Raw, 1)),
                     Dto.Field("looseAllowed", Math.Round(food.LooseAllowed.Total, 1)),
                     Dto.Field("looseForbidden", Math.Round(food.LooseForbidden.Total, 1)),
                     Dto.Field("daysLeft", food.EatenPerDay > 0f ? (double?)Math.Round(food.Stored.Total / food.EatenPerDay, 1) : null))),

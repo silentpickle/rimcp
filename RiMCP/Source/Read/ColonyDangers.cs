@@ -2,16 +2,37 @@ using System.Collections.Generic;
 using System.Linq;
 using RimWorld;
 using Verse;
+using Verse.AI;
 
 namespace RiMCP.Read
 {
+    // How bad a danger is. A temperature stage the game calls serious is Major.
+    internal enum DangerLevel { None, Minor, Major, Extreme }
+
+    // Heatstroke or hypothermia: which one, how far along, and the game's stage label.
+    internal sealed class TemperatureHarm
+    {
+        public string Kind;
+        public float Severity;
+        public string Stage;
+        public DangerLevel Level;
+
+        public string Describe()
+        {
+            return Kind + " " + Stage;
+        }
+    }
+
     // Every danger to the colony is defined here once. The digest, colony status, threat list and
     // the stop conditions on time advances all ask these, so they cannot disagree about who is in
     // danger.
     internal static class ColonyDangers
     {
-        // Below this mood a pawn counts as low in mood.
-        public const float LowMoodLevel = 0.35f;
+        // The minimum severities of the minor, serious and extreme stages of both the Heatstroke
+        // and the Hypothermia hediff defs.
+        public const float HarmMinorSeverity = 0.2f;
+        public const float HarmSeriousSeverity = 0.35f;
+        public const float HarmExtremeSeverity = 0.62f;
 
         public static bool Downed(Pawn pawn)
         {
@@ -29,9 +50,86 @@ namespace RiMCP.Read
             return pawn.needs?.food != null && pawn.needs.food.CurCategory >= HungerCategory.UrgentlyHungry;
         }
 
-        public static bool LowMood(Pawn pawn)
+        // The game's own mental break risk: the break its MentalBreaker counts as imminent, which
+        // uses the pawn's own thresholds (traits, ideology and so on change them).
+        public static DangerLevel BreakRisk(Pawn pawn)
         {
-            return pawn.needs?.mood != null && pawn.needs.mood.CurLevelPercentage < LowMoodLevel;
+            MentalBreaker breaker = pawn.mindState?.mentalBreaker;
+            if (breaker == null || pawn.needs?.mood == null)
+            {
+                return DangerLevel.None;
+            }
+            return BreakLevel(breaker.BreakExtremeIsImminent, breaker.BreakMajorIsImminent, breaker.BreakMinorIsImminent);
+        }
+
+        internal static DangerLevel BreakLevel(bool extreme, bool major, bool minor)
+        {
+            if (extreme)
+            {
+                return DangerLevel.Extreme;
+            }
+            if (major)
+            {
+                return DangerLevel.Major;
+            }
+            return minor ? DangerLevel.Minor : DangerLevel.None;
+        }
+
+        // The worse of the pawn's heatstroke and hypothermia, or null when it has neither visibly.
+        public static TemperatureHarm TemperatureHarmOf(Pawn pawn)
+        {
+            if (pawn.health?.hediffSet == null)
+            {
+                return null;
+            }
+            TemperatureHarm heat = Harm(pawn.health.hediffSet.GetFirstHediffOfDef(HediffDefOf.Heatstroke));
+            TemperatureHarm cold = Harm(pawn.health.hediffSet.GetFirstHediffOfDef(HediffDefOf.Hypothermia));
+            if (heat == null || (cold != null && cold.Severity > heat.Severity))
+            {
+                return cold;
+            }
+            return heat;
+        }
+
+        private static TemperatureHarm Harm(Hediff hediff)
+        {
+            if (hediff == null || !hediff.Visible)
+            {
+                return null;
+            }
+            return new TemperatureHarm
+            {
+                Kind = hediff.def.defName,
+                Severity = hediff.Severity,
+                Stage = hediff.CurStage?.label,
+                Level = HarmLevel(hediff.Severity)
+            };
+        }
+
+        internal static DangerLevel HarmLevel(float severity)
+        {
+            if (severity >= HarmExtremeSeverity)
+            {
+                return DangerLevel.Extreme;
+            }
+            if (severity >= HarmSeriousSeverity)
+            {
+                return DangerLevel.Major;
+            }
+            return severity >= HarmMinorSeverity ? DangerLevel.Minor : DangerLevel.None;
+        }
+
+        // Where the pawn stands is hotter or colder than its clothes and body can take, so
+        // heatstroke or hypothermia will build.
+        public static bool OutsideSafeTemperature(Pawn pawn)
+        {
+            return pawn.Spawned && !pawn.SafeTemperatureRange().Includes(pawn.AmbientTemperature);
+        }
+
+        // In bed to recover, as the game sends a pawn to medical rest, rather than asleep.
+        public static bool IsPatient(Pawn pawn)
+        {
+            return pawn.health != null && pawn.Spawned && pawn.InBed() && HealthAIUtility.ShouldSeekMedicalRest(pawn);
         }
 
         // Alert_LowFood's test on a home map, given its stored food, without the alert's grace
@@ -42,11 +140,18 @@ namespace RiMCP.Read
                 && storedNutrition < FoodSummary.LowPerColonist * map.mapPawns.FreeColonistsSpawnedCount;
         }
 
-        // A colonist (or mech) who could take this work now as the game's menus check it: not
-        // downed and with the work type on.
+        // A colonist (or mech) who could take this work as the game's menus check it: not downed
+        // and with the work type on.
         public static bool WorkActive(Pawn pawn, WorkTypeDef work)
         {
             return !pawn.Downed && pawn.workSettings != null && pawn.workSettings.WorkIsActive(work);
+        }
+
+        // Would actually take this work now: also not drafted, not in a mental state, and not in
+        // bed rest.
+        public static bool CanDoWorkNow(Pawn pawn, WorkTypeDef work)
+        {
+            return WorkActive(pawn, work) && !pawn.Drafted && !pawn.InMentalState && !IsPatient(pawn);
         }
 
         public static bool IsThreatPawn(Pawn pawn)
@@ -70,29 +175,17 @@ namespace RiMCP.Read
             return prey != null && prey.Faction == Faction.OfPlayer;
         }
 
-        // How many of the colony's core pawns are in each pawn danger.
-        internal sealed class PawnCounts
+        public static string LevelName(DangerLevel level)
         {
-            public int Downed;
-            public int UrgentlyHungry;
-            public int LowMood;
-
-            public static PawnCounts Of(IEnumerable<Pawn> core)
-            {
-                var counts = new PawnCounts();
-                foreach (Pawn pawn in core)
-                {
-                    counts.Downed += Downed(pawn) ? 1 : 0;
-                    counts.UrgentlyHungry += UrgentlyHungry(pawn) ? 1 : 0;
-                    counts.LowMood += LowMood(pawn) ? 1 : 0;
-                }
-                return counts;
-            }
+            return level == DangerLevel.None ? null : level.ToString().ToLowerInvariant();
         }
 
-        public static IEnumerable<Pawn> LowMoodPawns(IEnumerable<Pawn> core)
+        public static IEnumerable<Pawn> ByBreakRisk(IEnumerable<Pawn> core)
         {
-            return core.Where(LowMood).OrderBy(pawn => pawn.needs.mood.CurLevelPercentage);
+            return core.Select(pawn => new { pawn, level = BreakRisk(pawn) })
+                .Where(entry => entry.level != DangerLevel.None)
+                .OrderByDescending(entry => entry.level)
+                .Select(entry => entry.pawn);
         }
     }
 }

@@ -19,56 +19,62 @@ namespace RiMCP.Read
                 .Concat(Fires(context.Map).OrderBy(fire => fire.Position.x).ThenBy(fire => fire.Position.z));
 
             Page<Thing> page = new Page<Thing>(threats, context.Request);
+            Pawn[] core = PawnReadService.PawnsForFilter(context.Map, "core").Select(role => role.Pawn).ToArray();
+            FoodSummary food = context.Map.IsPlayerHome ? FoodSummary.Of(context.Map) : null;
+            DangerSnapshot dangers = DangerSnapshot.Of(context.Map, core, food);
             return ReadEnvelope.Ok(context, Dto.Obj(
-                Dto.Field("summary", SummarizeThreats(context.Map)),
+                Dto.Field("summary", dangers.Threats.ToDto()),
+                Dto.Field("dangers", dangers.Rows()),
                 Dto.Field("threats", page.Items.Select(thing => thing is Pawn
                     ? SerializeThreatPawn(context.Map, (Pawn)thing, context.Request.Detail)
                     : SerializeFire(context.Map, thing)).ToArray())), page.Truncated, page.NextCursor, "threats");
         }
 
+        // Visible threats by kind. A pawn can be both hostile and a manhunter; total counts it once.
+        internal sealed class ThreatCounts
+        {
+            public int Hostiles;
+            public int Manhunters;
+            public int Predators;
+            public int ThreatPawns;
+            public int Fires;
+
+            public int Total
+            {
+                get { return ThreatPawns + Fires; }
+            }
+
+            public object ToDto()
+            {
+                return Dto.Obj(
+                    Dto.Field("hostiles", Hostiles),
+                    Dto.Field("manhunters", Manhunters),
+                    Dto.Field("predators", Predators),
+                    Dto.Field("fires", Fires),
+                    Dto.Field("total", Total));
+            }
+        }
+
         public static object SummarizeThreats(Map map)
         {
-            if (map == null)
+            return map == null ? null : CountThreats(map).ToDto();
+        }
+
+        internal static ThreatCounts CountThreats(Map map)
+        {
+            var counts = new ThreatCounts();
+            foreach (Pawn pawn in map.mapPawns.AllPawnsSpawned.Where(pawn => PawnReadService.Visible(map, pawn)))
             {
-                return null;
-            }
-            int hostiles = 0;
-            int manhunters = 0;
-            int hungryPredators = 0;
-            int threatPawns = 0;
-            foreach (Pawn pawn in map.mapPawns.AllPawnsSpawned)
-            {
-                if (!PawnReadService.Visible(map, pawn))
-                {
-                    continue;
-                }
                 bool hostile = pawn.HostileTo(Faction.OfPlayer);
                 bool manhunter = ColonyDangers.IsManhunter(pawn);
                 bool predator = ColonyDangers.IsPredator(pawn);
-                if (hostile)
-                {
-                    hostiles++;
-                }
-                if (manhunter)
-                {
-                    manhunters++;
-                }
-                if (predator)
-                {
-                    hungryPredators++;
-                }
-                if (hostile || manhunter || predator)
-                {
-                    threatPawns++;
-                }
+                counts.Hostiles += hostile ? 1 : 0;
+                counts.Manhunters += manhunter ? 1 : 0;
+                counts.Predators += predator ? 1 : 0;
+                counts.ThreatPawns += hostile || manhunter || predator ? 1 : 0;
             }
-            int fires = Fires(map).Count();
-            return Dto.Obj(
-                Dto.Field("hostiles", hostiles),
-                Dto.Field("manhunters", manhunters),
-                Dto.Field("predators", hungryPredators),
-                Dto.Field("fires", fires),
-                Dto.Field("total", threatPawns + fires));
+            counts.Fires = Fires(map).Count();
+            return counts;
         }
 
         private static object SerializeThreatPawn(Map map, Pawn pawn, ReadDetail detail)

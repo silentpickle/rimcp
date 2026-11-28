@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using RiMCP.Read;
 
 namespace RiMCP.Command
 {
@@ -55,6 +56,8 @@ namespace RiMCP.Command
             Pawn("downed", "a colonist down", (before, now) => !now.Dead && now.Downed && !before.Downed, now => "downed"),
             Pawn("injured", "an injury", NewInjury, now => now.Bleeding ? "bleeding" : "new injury"),
             Pawn("mentalBreak", "a mental break", (before, now) => !now.Dead && now.MentalState != null && before.MentalState == null, now => now.MentalState),
+            Pawn("breakRisk", "an extreme mental break risk", (before, now) => !now.Dead && Reached(now.BreakRisk, before.BreakRisk, DangerLevel.Extreme), now => "extreme break risk"),
+            Pawn("temperature", "serious heatstroke or hypothermia", (before, now) => !now.Dead && Reached(now.Temperature, before.Temperature, DangerLevel.Major), now => now.TemperatureDetail),
             Appeared("hostiles", "hostiles", Threats, observation => observation.Threat),
             Appeared("lowFood", "low food", Food, observation => observation.LowFood),
             Letter("threatLetter", "a threat letter", threat: true, stopAlias: "letter"),
@@ -100,6 +103,12 @@ namespace RiMCP.Command
         public static bool MatchesAlias(string kind, HashSet<string> stopOn)
         {
             return ByKind.TryGetValue(kind, out Watcher row) && row.StopAlias != null && stopOn.Contains(row.StopAlias);
+        }
+
+        // A danger rose to the level that matters from below it.
+        private static bool Reached(DangerLevel now, DangerLevel before, DangerLevel level)
+        {
+            return now >= level && before < level;
         }
 
         private static Watcher Pawn(string kind, string summary, Func<ColonistState, ColonistState, bool> changed, Func<ColonistState, string> detail, bool defaultStop = true)

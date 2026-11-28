@@ -11,6 +11,9 @@ namespace RiMCP.Read
 {
     internal static class GameReadService
     {
+        private const int MaxMoodExamples = 5;
+        // Kept longest when the reply is over budget: the dangers are what the dashboard is for.
+        private static readonly string[] StatusPriorityFields = { "topRisks" };
 
         public static BridgeResponse GetGameContext(BridgeRequest request, RouteMatch route)
         {
@@ -37,10 +40,10 @@ namespace RiMCP.Read
 
             List<PawnReadService.PawnRole> pawns = PawnReadService.PawnsForFilter(context.Map, "all").ToList();
             List<Pawn> core = pawns.Where(role => PawnReadService.IsCoreRole(role.Role)).Select(role => role.Pawn).ToList();
-            List<Pawn> hostiles = pawns.Where(role => role.Role == "hostile").Select(role => role.Pawn).ToList();
             List<ResourceReadService.ResourceGroup> resources = ResourceReadService.CollectResources(context.Map).ToList();
             FoodSummary food = context.Map.IsPlayerHome ? FoodSummary.Of(context.Map) : null;
-            List<object> risks = BuildRisks(context.Map, core, hostiles, food);
+            DangerSnapshot dangers = DangerSnapshot.Of(context.Map, core, food);
+            List<Dictionary<string, object>> risks = BuildRisks(context.Map, dangers);
 
             return ReadEnvelope.Ok(context, Dto.Obj(
                 Dto.Field("map", ReadUtil.MapSummary(context.Map)),
@@ -50,12 +53,12 @@ namespace RiMCP.Read
                 Dto.Field("resources", ResourceReadService.SummarizeResources(context.Map, resources)),
                 Dto.Field("food", food == null ? null : food.ToDto(context.Map)),
                 Dto.Field("medical", MedicalSummary(core)),
-                Dto.Field("mood", MoodSummary(core)),
-                Dto.Field("threats", ThreatReadService.SummarizeThreats(context.Map)),
+                Dto.Field("mood", MoodSummary(core, dangers)),
+                Dto.Field("threats", dangers.Threats.ToDto()),
                 Dto.Field("environment", EnvironmentReadService.SummarizeEnvironment(context.Map)),
                 Dto.Field("power", PowerReadService.SummarizePower(context.Map)),
                 Dto.Field("currentResearch", ResearchReadService.SerializeProject(ResearchReadService.CurrentProject(), ReadDetail.Summary)),
-                Dto.Field("recentEvents", RecentEvents(8))));
+                Dto.Field("recentEvents", RecentEvents(8))), detailSection: "recentEvents", priorityFields: StatusPriorityFields);
         }
 
         public static object SerializeTime(int ticks, Map map)
@@ -170,66 +173,36 @@ namespace RiMCP.Read
                     Dto.Field("downed", pawn.Downed))).ToArray()));
         }
 
-        private static object MoodSummary(IEnumerable<Pawn> core)
+        private static object MoodSummary(IEnumerable<Pawn> core, DangerSnapshot dangers)
         {
             List<Pawn> moodPawns = core.Where(pawn => pawn.needs != null && pawn.needs.mood != null).ToList();
-            List<Pawn> low = ColonyDangers.LowMoodPawns(moodPawns).ToList();
             return Dto.Obj(
                 Dto.Field("average", moodPawns.Count == 0 ? 0f : moodPawns.Average(pawn => pawn.needs.mood.CurLevelPercentage)),
-                Dto.Field("lowMood", low.Count),
-                Dto.Field("examples", low.Take(5).Select(pawn => Dto.Obj(
+                Dto.Field("breakRisk", dangers.BreakRiskCounts()),
+                Dto.Field("examples", ColonyDangers.ByBreakRisk(moodPawns).Take(MaxMoodExamples).Select(pawn => Dto.Obj(
                     Dto.Field("id", ReadUtil.ThingId(pawn)),
                     Dto.Field("name", ReadUtil.PawnName(pawn)),
-                    Dto.Field("mood", pawn.needs.mood.CurLevelPercentage))).ToArray()));
+                    Dto.Field("mood", pawn.needs.mood.CurLevelPercentage),
+                    Dto.Field("breakRisk", ColonyDangers.LevelName(dangers.BreakRiskOf(pawn))))).ToArray()));
         }
 
-        private static List<object> BuildRisks(Map map, List<Pawn> core, List<Pawn> hostiles, FoodSummary food)
+        // The colony's dangers, then blocked bills, worst first.
+        private static List<Dictionary<string, object>> BuildRisks(Map map, DangerSnapshot dangers)
         {
-            List<object> risks = new List<object>();
-            ColonyDangers.PawnCounts dangers = ColonyDangers.PawnCounts.Of(core);
-            if (dangers.Downed > 0)
-            {
-                risks.Add(Risk("medical", "downedCorePawns", "Downed core pawns need attention.", dangers.Downed, "list_pawns?filter=core&include=health"));
-            }
-            if (dangers.LowMood > 0)
-            {
-                risks.Add(Risk("mood", "lowMood", "Core pawns are below mental break comfort range.", dangers.LowMood, "list_pawns?filter=core&include=needs"));
-            }
-            if (hostiles.Count > 0)
-            {
-                risks.Add(Risk("threat", "hostilesPresent", "Hostile pawns are spawned on the map.", hostiles.Count, "list_threats"));
-            }
-            if (dangers.UrgentlyHungry > 0)
-            {
-                risks.Add(Risk("resources", "hungryPawns", "Core pawns are urgently hungry or starving.", dangers.UrgentlyHungry, "list_pawns?filter=core&include=needs"));
-            }
+            List<Dictionary<string, object>> risks = dangers.Rows();
             // Only whether each bill is blocked: one shared scan, and counting stops at enough.
             BillInputs inputs = map == null ? null : new BillInputs(map);
             int blockedBills = map == null ? 0 : ProductionReadService.BillRecords(map)
                 .Count(record => BillStatus.Of(record.Bill, record.Workbench, record.Giver, inputs, false).Blocking.Count > 0);
             if (blockedBills > 0)
             {
-                risks.Add(Risk("production", "blockedBills", "Active bills cannot be done: missing ingredients, workers, fuel, or power.", blockedBills, "list_production"));
+                risks.Add(DangerSnapshot.Row("production", "blockedBills", DangerLevel.Minor, "Active bills cannot be done: missing ingredients, workers, fuel, or power.", blockedBills, "list_production", null));
             }
-            if (map != null && ColonyDangers.LowFood(map, food != null ? food.Stored.Total : FoodSample.Take(map).Total))
+            foreach (Dictionary<string, object> risk in risks)
             {
-                risks.Add(Risk("resources", "lowFood", "Stored human-edible nutrition is below the game's Low food threshold of 4 per colonist.", (int)ResourceReadService.StoredHumanNutrition(map), "list_resources"));
+                risk.Remove("examples");
             }
-            if (food != null && food.Wasting)
-            {
-                risks.Add(Risk("resources", "foodRotting", "More stored food will rot within a day than the colonists eat in a day; cook it, or keep it cold.", (int)food.RotsWithinDay, "list_resources"));
-            }
-            return risks;
-        }
-
-        private static object Risk(string category, string code, string label, int count, string nextRead)
-        {
-            return Dto.Obj(
-                Dto.Field("category", category),
-                Dto.Field("code", code),
-                Dto.Field("label", label),
-                Dto.Field("count", count),
-                Dto.Field("nextRead", nextRead));
+            return DangerSnapshot.Sorted(risks);
         }
 
         private static string LetterText(Letter letter)

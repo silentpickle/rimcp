@@ -20,6 +20,9 @@ namespace RiMCP.Command
         public bool Bleeding;
         public int Injuries;
         public string MentalState;
+        public DangerLevel BreakRisk;
+        public DangerLevel Temperature;
+        public string TemperatureDetail;
     }
 
     internal sealed class LetterState
@@ -602,6 +605,10 @@ namespace RiMCP.Command
             // Fresh injuries only: scars are permanent, and diseases needing re-tending are not new harm.
             state.Injuries = pawn.health.hediffSet.hediffs.Count(hediff => hediff is Hediff_Injury && !hediff.IsPermanent());
             state.MentalState = pawn.MentalStateDef == null ? null : ReadUtil.DefLabel(pawn.MentalStateDef);
+            state.BreakRisk = ColonyDangers.BreakRisk(pawn);
+            TemperatureHarm harm = ColonyDangers.TemperatureHarmOf(pawn);
+            state.Temperature = harm == null ? DangerLevel.None : harm.Level;
+            state.TemperatureDetail = harm?.Describe();
             return state;
         }
     }
