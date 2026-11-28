@@ -504,8 +504,7 @@ namespace RiMCP.Command
                 {
                     float nutrition = FoodSample.Take(home).Total;
                     storedFood += nutrition;
-                    if (low == null && home.mapPawns.AnyColonistSpawned &&
-                        nutrition < FoodSummary.LowPerColonist * home.mapPawns.FreeColonistsSpawnedCount)
+                    if (low == null && ColonyDangers.LowFood(home, nutrition))
                     {
                         low = home;
                     }

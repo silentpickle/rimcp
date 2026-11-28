@@ -145,7 +145,7 @@ namespace RiMCP.Read
                 return;
             }
             bool anyone = map.mapPawns.FreeColonistsSpawned.Concat(map.mapPawns.SpawnedColonyMechs)
-                .Any(pawn => !pawn.Downed && pawn.workSettings != null && pawn.workSettings.WorkIsActive(work)
+                .Any(pawn => ColonyDangers.WorkActive(pawn, work)
                     && bill.PawnAllowedToStartAnew(pawn) && bill.recipe.PawnSatisfiesSkillRequirements(pawn));
             if (anyone)
             {

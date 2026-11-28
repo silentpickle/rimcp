@@ -38,21 +38,19 @@ namespace RiMCP.Read
             var movers = map == null ? null : new SurveyMovers(map, origin, colonists);
             TickManager clock = Find.TickManager;
             var windows = BlockingWindows.Now();
+            ColonyDangers.PawnCounts dangers = ColonyDangers.PawnCounts.Of(core);
             return Dto.Obj(
                 Dto.Field("paused", clock.Paused),
                 Dto.Field("speed", clock.CurTimeSpeed.ToString()),
                 Dto.Field("blockedBy", windows.Take(3).Select(window => Bounded(window.GetType().Name)).ToArray()),
                 Dto.Field("blockingDetails", BlockingWindows.Describe(windows)),
                 Dto.Field("risks", map == null ? null : Dto.Obj(
-                    Dto.Field("downed", core.Count(pawn => pawn.Downed)),
-                    Dto.Field("urgentlyHungry", core.Count(pawn =>
-                        pawn.needs?.food != null && pawn.needs.food.CurCategory >= HungerCategory.UrgentlyHungry)),
-                    Dto.Field("lowMood", core.Count(pawn =>
-                        pawn.needs?.mood != null && pawn.needs.mood.CurLevelPercentage < 0.35f)),
+                    Dto.Field("downed", dangers.Downed),
+                    Dto.Field("urgentlyHungry", dangers.UrgentlyHungry),
+                    Dto.Field("lowMood", dangers.LowMood),
                     Dto.Field("threats", ThreatReadService.SummarizeThreats(map)))),
                 Dto.Field("food", food == null ? null : Dto.Obj(
-                    Dto.Field("low", map.mapPawns.AnyColonistSpawned &&
-                        food.Stored.Total < FoodSummary.LowPerColonist * map.mapPawns.FreeColonistsSpawnedCount),
+                    Dto.Field("low", ColonyDangers.LowFood(map, food.Stored.Total)),
                     Dto.Field("stored", Math.Round(food.Stored.Total, 1)),
                     Dto.Field("looseAllowed", Math.Round(food.LooseAllowed.Total, 1)),
                     Dto.Field("looseForbidden", Math.Round(food.LooseForbidden.Total, 1)),

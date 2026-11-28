@@ -10,6 +10,9 @@ namespace RiMCP.Read
 {
     internal static class PawnReadService
     {
+        // A need below this level is one the pawn is looking to satisfy.
+        private const float SeekingLevel = 0.35f;
+
         private static readonly string[] SupportedFilters =
         {
             "core", "colonist", "colonists", "slave", "slaves", "prisoner", "prisoners",
@@ -284,7 +287,7 @@ namespace RiMCP.Read
                     Dto.Field("defName", need.def.defName),
                     Dto.Field("label", need.LabelCap),
                     Dto.Field("level", need.CurLevelPercentage),
-                    Dto.Field("seeking", need.CurLevelPercentage < 0.35f)));
+                    Dto.Field("seeking", need.CurLevelPercentage < SeekingLevel)));
             }
             return needs;
         }

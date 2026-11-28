@@ -173,7 +173,7 @@ namespace RiMCP.Read
         private static object MoodSummary(IEnumerable<Pawn> core)
         {
             List<Pawn> moodPawns = core.Where(pawn => pawn.needs != null && pawn.needs.mood != null).ToList();
-            List<Pawn> low = moodPawns.Where(pawn => pawn.needs.mood.CurLevelPercentage < 0.35f).OrderBy(pawn => pawn.needs.mood.CurLevelPercentage).ToList();
+            List<Pawn> low = ColonyDangers.LowMoodPawns(moodPawns).ToList();
             return Dto.Obj(
                 Dto.Field("average", moodPawns.Count == 0 ? 0f : moodPawns.Average(pawn => pawn.needs.mood.CurLevelPercentage)),
                 Dto.Field("lowMood", low.Count),
@@ -186,24 +186,22 @@ namespace RiMCP.Read
         private static List<object> BuildRisks(Map map, List<Pawn> core, List<Pawn> hostiles, FoodSummary food)
         {
             List<object> risks = new List<object>();
-            int downed = core.Count(pawn => pawn.Downed);
-            if (downed > 0)
+            ColonyDangers.PawnCounts dangers = ColonyDangers.PawnCounts.Of(core);
+            if (dangers.Downed > 0)
             {
-                risks.Add(Risk("medical", "downedCorePawns", "Downed core pawns need attention.", downed, "list_pawns?filter=core&include=health"));
+                risks.Add(Risk("medical", "downedCorePawns", "Downed core pawns need attention.", dangers.Downed, "list_pawns?filter=core&include=health"));
             }
-            int lowMood = core.Count(pawn => pawn.needs != null && pawn.needs.mood != null && pawn.needs.mood.CurLevelPercentage < 0.35f);
-            if (lowMood > 0)
+            if (dangers.LowMood > 0)
             {
-                risks.Add(Risk("mood", "lowMood", "Core pawns are below mental break comfort range.", lowMood, "list_pawns?filter=core&include=needs"));
+                risks.Add(Risk("mood", "lowMood", "Core pawns are below mental break comfort range.", dangers.LowMood, "list_pawns?filter=core&include=needs"));
             }
             if (hostiles.Count > 0)
             {
                 risks.Add(Risk("threat", "hostilesPresent", "Hostile pawns are spawned on the map.", hostiles.Count, "list_threats"));
             }
-            int hungry = core.Count(pawn => pawn.needs != null && pawn.needs.food != null && pawn.needs.food.CurCategory >= HungerCategory.UrgentlyHungry);
-            if (hungry > 0)
+            if (dangers.UrgentlyHungry > 0)
             {
-                risks.Add(Risk("resources", "hungryPawns", "Core pawns are urgently hungry or starving.", hungry, "list_pawns?filter=core&include=needs"));
+                risks.Add(Risk("resources", "hungryPawns", "Core pawns are urgently hungry or starving.", dangers.UrgentlyHungry, "list_pawns?filter=core&include=needs"));
             }
             // Only whether each bill is blocked: one shared scan, and counting stops at enough.
             BillInputs inputs = map == null ? null : new BillInputs(map);
@@ -213,7 +211,7 @@ namespace RiMCP.Read
             {
                 risks.Add(Risk("production", "blockedBills", "Active bills cannot be done: missing ingredients, workers, fuel, or power.", blockedBills, "list_production"));
             }
-            if (map != null && FoodSummary.IsLow(map))
+            if (map != null && ColonyDangers.LowFood(map, food != null ? food.Stored.Total : FoodSample.Take(map).Total))
             {
                 risks.Add(Risk("resources", "lowFood", "Stored human-edible nutrition is below the game's Low food threshold of 4 per colonist.", (int)ResourceReadService.StoredHumanNutrition(map), "list_resources"));
             }

@@ -13,7 +13,7 @@ namespace RiMCP.Read
             ReadContext context = ReadContext.FromMap(request);
 
             IEnumerable<Thing> threats = context.Map.mapPawns.AllPawnsSpawned
-                .Where(pawn => IsThreatPawn(pawn) && PawnReadService.Visible(context.Map, pawn))
+                .Where(pawn => ColonyDangers.IsThreatPawn(pawn) && PawnReadService.Visible(context.Map, pawn))
                 .OrderBy(pawn => pawn.LabelShortCap)
                 .Cast<Thing>()
                 .Concat(Fires(context.Map).OrderBy(fire => fire.Position.x).ThenBy(fire => fire.Position.z));
@@ -43,8 +43,8 @@ namespace RiMCP.Read
                     continue;
                 }
                 bool hostile = pawn.HostileTo(Faction.OfPlayer);
-                bool manhunter = IsManhunter(pawn);
-                bool predator = IsPredator(pawn);
+                bool manhunter = ColonyDangers.IsManhunter(pawn);
+                bool predator = ColonyDangers.IsPredator(pawn);
                 if (hostile)
                 {
                     hostiles++;
@@ -69,27 +69,6 @@ namespace RiMCP.Read
                 Dto.Field("predators", hungryPredators),
                 Dto.Field("fires", fires),
                 Dto.Field("total", threatPawns + fires));
-        }
-
-        private static bool IsThreatPawn(Pawn pawn)
-        {
-            return pawn != null && (pawn.HostileTo(Faction.OfPlayer) || IsManhunter(pawn) || IsPredator(pawn));
-        }
-
-        internal static bool IsManhunter(Pawn pawn)
-        {
-            return pawn != null && pawn.MentalStateDef != null && pawn.MentalStateDef.defName.IndexOf("Manhunter", System.StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        // A predator only threatens the colony while it hunts one of its people or animals.
-        private static bool IsPredator(Pawn pawn)
-        {
-            if (pawn == null || pawn.RaceProps == null || !pawn.RaceProps.predator || pawn.Faction == Faction.OfPlayer || pawn.CurJobDef != JobDefOf.PredatorHunt)
-            {
-                return false;
-            }
-            Pawn prey = pawn.CurJob.targetA.Thing as Pawn;
-            return prey != null && prey.Faction == Faction.OfPlayer;
         }
 
         private static object SerializeThreatPawn(Map map, Pawn pawn, ReadDetail detail)
@@ -121,7 +100,7 @@ namespace RiMCP.Read
 
         private static string ThreatKind(Pawn pawn)
         {
-            if (IsManhunter(pawn))
+            if (ColonyDangers.IsManhunter(pawn))
             {
                 return "manhunter";
             }

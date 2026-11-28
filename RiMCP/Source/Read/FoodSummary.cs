@@ -88,13 +88,6 @@ namespace RiMCP.Read
             get { return RotsWithinDay > EatenPerDay; }
         }
 
-        // Alert_LowFood, without its grace period at the start of a game.
-        public static bool IsLow(Map map)
-        {
-            return map.IsPlayerHome && map.mapPawns.AnyColonistSpawned
-                && FoodSample.Take(map).Total < LowPerColonist * map.mapPawns.FreeColonistsSpawnedCount;
-        }
-
         public object ToDto(Map map)
         {
             return Dto.Obj(

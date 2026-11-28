@@ -35,7 +35,7 @@ namespace RiMCP.Read
         {
             foreach (Pawn pawn in map.mapPawns.FreeColonistsSpawned)
             {
-                if (!pawn.Downed && pawn.workSettings != null && pawn.workSettings.WorkIsActive(work) && (skill == null || pawn.skills == null ? minSkill <= 0 : pawn.skills.GetSkill(skill).Level >= minSkill))
+                if (ColonyDangers.WorkActive(pawn, work) && (skill == null || pawn.skills == null ? minSkill <= 0 : pawn.skills.GetSkill(skill).Level >= minSkill))
                 {
                     return true;
                 }
