@@ -66,6 +66,8 @@ namespace RiMCP.Command
         // was still shows. Null where every answer closes the dialog or moves it on.
         public Func<int> Activations;
         public Action Arm;
+        // Inputs the window shows besides its options, such as the names a naming window offers.
+        public Func<object> Fields;
 
         public static DialogAdapter For(Window window)
         {
@@ -88,6 +90,10 @@ namespace RiMCP.Command
             if (slider != null && SliderValue != null && SliderConfirm != null)
             {
                 return Slider(slider);
+            }
+            if (NamingDialog.Supports(window))
+            {
+                return NamingDialog.For((RimWorld.Dialog_GiveName)window);
             }
             return null;
         }
@@ -263,7 +269,7 @@ namespace RiMCP.Command
             };
         }
 
-        private static bool Covers(Window window)
+        internal static bool Covers(Window window)
         {
             List<Window> windows = Find.WindowStack.Windows.ToList();
             int index = windows.IndexOf(window);
@@ -509,6 +515,7 @@ namespace RiMCP.Command
                 Dto.Field("title", open ? interaction.Dialog.Title() : null),
                 Dto.Field("question", open ? interaction.Dialog.Question() : null),
                 Dto.Field("options", open ? interaction.Options.Select(option => option.ToDto()).ToArray() : null),
+                Dto.Field("fields", open && interaction.Dialog.Fields != null ? interaction.Dialog.Fields() : null),
                 Dto.Field("valueRange", open && interaction.Dialog.SetValue != null ? new[] { interaction.Dialog.Min, interaction.Dialog.Max } : null),
                 Dto.Field("canCancel", open ? (object)interaction.Dialog.CanCancel() : null));
         }

@@ -137,7 +137,24 @@ namespace RiMCP.Command
                 }
             }
             AdvanceRun bound = run;
+            if (query.OptionalBool("digest") == true)
+            {
+                return WithWait(request, run, () => AdvanceDigest(bound));
+            }
             return WithWait(request, run, () => AdvanceStatus(request, bound));
+        }
+
+        // The compact turn read for the requested run, rebuilt when a wait ends. The run's end reason,
+        // stop tick and blockedAtStop are history; blockedBy and blockingDetails are the reply's tick.
+        private static BridgeResponse AdvanceDigest(AdvanceRun run)
+        {
+            if (run != null && !ReferenceEquals(Current.Game, run.Game))
+            {
+                return BridgeResponse.Error(409, "The loaded game changed while waiting for the digest.");
+            }
+            CommandContext context = CommandUtil.ContextFor(null);
+            return CommandEnvelope.Ok(context, false, DigestReadService.Describe(context.Map, run),
+                DigestReadService.Budget(), detailSection: "recentLetters", priorityFields: DigestReadService.PriorityFields);
         }
 
         // A wait changes when the reply arrives, not what it describes: the reply is rebuilt for the

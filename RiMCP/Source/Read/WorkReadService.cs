@@ -14,6 +14,11 @@ namespace RiMCP.Read
             var pawns = PawnReadService.PawnsForFilter(context.Map, "core")
                 .OrderBy(role => role.Pawn.LabelShortCap);
             Page<PawnReadService.PawnRole> page = new Page<PawnReadService.PawnRole>(pawns, context.Request);
+            if (context.Request.OptionalBool(WorkSweep.Flag) == true)
+            {
+                return ReadEnvelope.Ok(context, WorkSweep.Describe(context.Map, page.Items, context.Request), page.Truncated,
+                    page.NextCursor, "pawns", revisionScope: "work-sweep", rowIds: page.Items.Select(role => ReadUtil.ThingId(role.Pawn)));
+            }
 
             object suggestions = context.Request.Wants("suggestions") ? Suggestions(context.Map) : null;
             return ReadEnvelope.Ok(context, Dto.Obj(

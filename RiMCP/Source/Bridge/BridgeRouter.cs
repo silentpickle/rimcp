@@ -43,6 +43,7 @@ namespace RiMCP.Bridge
             { "order-pawns", PawnOrderCommandService.OrderPawns },
             { "preview-rescue", PawnOrderCommandService.PreviewRescue },
             { "work", WorkReadService.ListWork },
+            { "construction", ConstructionReadService.GetConstruction },
             { "production", ProductionReadService.ListProduction },
             { "bill", ProductionReadService.GetBill },
             { "set-bill", ProductionCommandService.SetBill },

@@ -163,6 +163,7 @@ internal static partial class Program
         Test("W1B_watch_priority", CheckAdvanceWatcherPriority);
         Test("W1B_watch_limit", CheckAdvanceWatcherLimit);
         Test("W2_advance_summary", CheckAdvanceSummary);
+        RegisterHarnessFollowUpChecks();
         Test("advance runs complete at the target and end on outside changes", () =>
         {
             object game = new object();
@@ -246,7 +247,7 @@ internal static partial class Program
         {
             IEnumerable tools = (IEnumerable)mod.GetType("RiMCP.Shared.ToolManifest", true).GetProperty("McpTools", Static).GetValue(null);
             Dictionary<string, int> counts = tools.Cast<object>().GroupBy(tool => Field<string>(tool, "Group") ?? "(none)").ToDictionary(group => group.Key, group => group.Count());
-            var expected = new Dictionary<string, int> { { "observe", 49 }, { "diagnostics", 5 }, { "time", 2 }, { "administration", 16 }, { "orders", 8 }, { "pawnControl", 6 }, { "decisions", 3 }, { "gameSettings", 1 }, { "gameSetup", 14 } };
+            var expected = new Dictionary<string, int> { { "observe", 50 }, { "diagnostics", 5 }, { "time", 2 }, { "administration", 16 }, { "orders", 8 }, { "pawnControl", 6 }, { "decisions", 3 }, { "gameSettings", 1 }, { "gameSetup", 14 } };
             int count;
             Check(counts.Count == expected.Count && expected.All(pair => counts.TryGetValue(pair.Key, out count) && count == pair.Value),
                 "group sizes: " + string.Join(", ", counts.Select(pair => pair.Key + "=" + pair.Value).ToArray()));

@@ -12,6 +12,7 @@ namespace RiMCP.Read
     internal static class DigestReadService
     {
         private const int DigestBytes = 2048;
+        private const int MaxStopWindows = 3;
         // Lowest to highest retention priority, after ordinary digest fields.
         internal static readonly string[] PriorityFields = { "advance", "blockingDetails", "blockedBy", "paused" };
 
@@ -78,6 +79,9 @@ namespace RiMCP.Read
                 Dto.Field("startTick", run.StartTick),
                 Dto.Field("targetTick", run.TargetTick),
                 Dto.Field("endTick", run.EndTick < 0 ? (int?)null : run.EndTick),
+                // Windows open when the run ended. The top-level blockedBy describes the reply's tick:
+                // a prompt can clear, or a new one open, after the run stopped.
+                Dto.Field("blockedAtStop", BlockedAtStop(run)),
                 Dto.Field("droppedEvents", run.DroppedEvents > 0 ? (int?)run.DroppedEvents : null),
                 Dto.Field("summary", run.Summary.Describe(researchLimit: 2)),
                 Dto.Field("recentEvents", run.Events.Skip(Math.Max(0, run.Events.Count - 3)).Select(change => Dto.Obj(
@@ -85,6 +89,15 @@ namespace RiMCP.Read
                     Dto.Field("tick", change.Tick),
                     Dto.Field("pawnId", change.PawnId),
                     Dto.Field("detail", Bounded(change.Detail)))).ToArray()));
+        }
+
+        private static string[] BlockedAtStop(AdvanceRun run)
+        {
+            if (run.Status == AdvanceRun.Running || run.Previous == null || run.Previous.Blocking.Count == 0)
+            {
+                return null;
+            }
+            return run.Previous.Blocking.Take(MaxStopWindows).Select(Bounded).ToArray();
         }
 
         private static string Bounded(string text)

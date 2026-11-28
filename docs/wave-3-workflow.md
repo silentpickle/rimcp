@@ -35,15 +35,20 @@ A `waitSeconds` timeout returns the current state and leaves the run in place. W
 
 ## Verify dialogues and asynchronous stops
 
-The Tedshobrad trial on the installed dialogue build verified a player-only faction and settlement naming window in `data.blockingDetails`. The compact reply reported `needsPlayer: true`; the game UI supplied the generated names and OK button. Live acceptance of the new compact fields for an MCP-answerable window remains open. The previous build accepted a Hospitality choice using the full dialog reply. The compact budget regression covers a fitting prompt, a prompt competing with long advance history, and an oversized prompt with explicit omission. [Trial and next-agent prompt](../../rimworld/colonies/coordination-test/handoffs/2026-11-27-dialogue-trial.md)
+Answerable prompts appear in `data.blockingDetails` of `get_turn_digest`, `advance_time(digest: true)` and `get_advance(digest: true)`. Each has the interaction ID, page, question, options and, for naming windows, the displayed names under `fields`. Answer with `answer_dialog` and a fresh `requestId`; a retry with the same ID returns the first result without acting again. A closed or changed page, a changed load, or a player's answer is refused. Windows without an adapter stay `needsPlayer: true`.
 
-Use a disposable research-completion fixture for a supported OK, and a disposable mod prompt for a multi-choice case. Verify the loaded DLL hash, proxy discovery and tool schemas first. Exercise the compact command reply when the bounded wait returns after the stop. If the first reply is still running, follow the run with `get_advance` and replay the original `advance_time` request ID and arguments to sample the same run in compact form. Confirm the full prompt, option IDs, page and interaction ID against current context. Use a fresh request ID for the intended answer, then test retry and stale page or load handling. Confirm whether the game remains paused and record the outcome and ticks. Record an explicit fallback read whenever the 2 KiB reply omits the choices.
+To follow a run without the full timeline, call `get_advance` with `digest: true` and `waitSeconds`. In its `advance` section, `endReason`, `endTick` and `blockedAtStop` describe how the run ended. The top-level `blockedBy` and `blockingDetails` describe the game at the reply's tick, so a prompt that cleared after the stop, or a new one, is shown as it is now. If `budget.omittedFields` lists `blockingDetails`, read `get_game_context`.
 
-Proposed follow-ups:
+### Recorded results
 
-- Extend the adapter for `Dialog_NamePlayerFactionAndSettlement` with the current generated names and an explicit accept-current-names option. Use the native validation path and keep the player-only fallback when the window cannot be driven.
-- Add an opt-in compact mode to `get_advance` for asynchronous callers. The stop reason and tick describe the run, while live blocking details describe the response time. Preserve that distinction when a prompt changes or clears. Keep the existing full response as the default.
-- Report calls, raw reply bytes and elapsed time per decision. Capture retries and failures, and label setup and save-verification traffic separately. The trial's 95,191 raw reply bytes across 90 successful main calls describe the whole session and cannot isolate the cost of dialog handling.
+November 27, RimWorld 1.6.4871, fresh stdio proxy (105 tools), DLL `8b3f9757…`. Byte counts are UTF-8 bridge payloads as the client received them.
+
+- **Research-complete OK** (previous build `9281bd81…`, copy of Tedshobrad at tick 384049). The compact `advance_time` reply carried the Battery prompt, both options, `dialog-1`, page 1 and `needsPlayer: false`. The answer cleared the window and the game stayed paused. The same request ID returned `changed: false`; a fresh ID on the answered page was refused. Decision: two calls.
+- **Naming window** (fixture loaded at tick 150000, stopped at 258200). `get_advance(digest: true)` returned 2,018 bytes with `kind: "naming"`, both generated names, the `accept` option and `blockedAtStop`. The answer (260 bytes) named the faction and settlement: `list_world` showed the player faction name and the map label changed. Retry and stale-page checks behaved as above. Decision: two calls, 2,278 bytes.
+- **Asynchronous follow-up.** `advance_time` with a 5-second wait returned a running digest of 1,101 bytes. `get_advance(digest: true, waitSeconds: 85)` returned 1,174 bytes for the same run.
+- **Work sweep.** For three colonists, `list_work` was 4,055 bytes by default and 6,614 bytes with schedules. `sweep: true` was 1,453 bytes, and 967 bytes with four chosen work types.
+- **Construction.** After placing 12 steel walls and one plasteel wall, `get_construction` reported `ready: 9, clearing: 3, needsMaterial: 1` and a steel shortfall of 60 remaining, 37 usable, 1,050 on the map (mostly forbidden). Two in-game hours later, 7 walls were built and the remaining 5 read `materialUnusable` (25 remaining, 2 usable) in 596 bytes.
+- A multi-choice prompt was not reproduced: this colony's earlier Hospitality answer stops that prompt recurring. The naming and research windows use the same serializer and page rules.
 
 ## Plan on the map
 
@@ -54,7 +59,7 @@ Proposed follow-ups:
 
 ## Reuse reference and work reads
 
-Run `export_reference` to write the building catalog, research tree, and setup lists to a new directory under the game's save-data folder. The manifest identifies the game build and active mod order. Pass `include: ["suggestions"]` to `list_work` for skill- and passion-ranked entries compatible with `set_work_priorities`. Review workload and the manual-priority setting before applying a selection. The suggestions do not change the game.
+Run `export_reference` to write the building catalog, research tree, and setup lists to a new directory under the game's save-data folder. The manifest identifies the game build and active mod order. For a routine work and schedule review, `list_work` with `sweep: true` gives each pawn's job, priorities and schedule blocks; add `workTypes` to narrow it. For a stalled build, `get_construction` names the outstanding site, its verdict, and material that is on the map but not usable there. Pass `include: ["suggestions"]` to `list_work` for skill- and passion-ranked entries compatible with `set_work_priorities`. Review workload and the manual-priority setting before applying a selection. The suggestions do not change the game.
 
 For local inspection of game and mod code, use the [source cache guide](source-research.md).
 

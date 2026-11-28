@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- `answer_dialog` can accept the game's naming windows (faction and settlement, faction, settlement, gravship). The dialog reports `kind: "naming"`, the displayed names under `fields` with their role and length limit, and one `accept` option whose text names exactly what it accepts. Accepting uses the window's own validation and naming code; a name the game refuses is refused with its message, and a name the player edits makes a new page. Editing and randomizing names stay with the player.
+- `get_advance` takes `digest: true` for the same 2 KiB turn read as `advance_time`, bound to the requested run and rebuilt when a wait ends. The run's `endReason`, `endTick` and new `blockedAtStop` are history; `blockedBy` and `blockingDetails` describe the game when the reply is sent.
+- `list_work` takes `sweep: true` (and optionally `workTypes`) for a routine review: each pawn's job, work as defName to priority, work it cannot do among the chosen types, and its schedule as hour blocks.
+- `get_construction`: one verdict per outstanding blueprint or frame (`building`, `ready`, `clearing`, `needsMaterial`, `materialUnusable`, `blocked`, `forbidden`, `noBuilder`), with counts by verdict and material shortfalls across every site. Material is counted as usable at the site and on the map, so forbidden or unreachable stock no longer looks available. Builder refusals come from the game's own `GenConstruct.CanConstruct`.
+
 ## [1.2.0] - 2026-11-21
 
 ### Added
