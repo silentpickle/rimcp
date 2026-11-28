@@ -6,13 +6,24 @@ Open RimWorld with the mod enabled. In **Connection → Copy MCP config**, copy 
 
 Use one proxy per agent against the same game and confirm the advertised tools before assigning work. Use `RIMCP_ROLE` for attribution and `RIMCP_TOOL_GROUPS` or `RIMCP_TOOLS` to set permissions. Share the load and map IDs with every assignment.
 
-- **Main** owns the clock, dialogs, and saves. Review current risks before starting `advance_time` with `untilStopped: true` and selected watchers. Request `digest: true` and follow the run ID as needed. Respect player pause requests and blocking dialogs. Send the digest and receipts to the other roles at meaningful stops.
-- **Steward** reads the assigned area and applies only delegated changes. Use a stable `requestId` on retries. Return the outcome and receipt to main.
+- **Main** owns the clock, dialogs, and saves. Review current risks before starting `advance_time` with `untilStopped: true` and selected watchers. Request `digest: true`, and follow a running advance with `get_advance` and `digest: true`. Respect player pause requests and blocking dialogs. Send the digest and receipts to the other roles at meaningful stops.
+- **Steward** reviews work, schedules and stalled jobs from main's evidence (`list_work` sweep, `get_construction`), reads the assigned area when one fact is missing, and applies only delegated changes. Use a stable `requestId` on retries. Return the outcome and receipt to main.
 - **Scribe** writes from main's digest and receipts while play continues. Zero live reads is normal. Preserve evidence ticks and gaps. When a missing event matters, use `get_events` with the last processed cursor on the same load.
 - **Sentinel** triages watcher stops, checks relevant threats or alerts, and escalates urgent changes with map and tick. Main owns the run and any response.
 - **Land advisor** compares candidate sites for soil, resources, access, and defensibility. Record the load, map, tick, and site constraints. Use read-only game tools.
 - **Builder** previews one approved construction assignment, reports material and placement blockers, and submits approved orders when granted the tools. Verify finished work separately from placement receipts.
 - **Researcher** checks current research and loaded definitions, then consults RimSage or reference material as needed. Return prerequisites and evidence to main for a project decision.
+
+## Keep the colony alive
+
+At each checkpoint, check the few settings that decide survival, and fix them before turning to projects:
+
+- **Work.** Turn on manual priorities once roles differ (a 1–4 priority does it) and match each pawn's work to skills and current health. A pawn in bed rest does no work, so make sure someone who is up covers vital work such as growing, cooking, doctoring and building. `list_work` with `sweep: true` shows each pawn's job, priorities and schedule in about 1 KB.
+- **Schedules and allowed areas.** Keep sleep, work and recreation blocks, and use allowed areas to keep pawns out of danger (indoors during a raid or heat wave) or apart from each other.
+- **Food and animals.** Watch stored days and the kind of food. Cooking every crop leaves no raw food, and taming, including wild people, needs raw food. Check pets and pens.
+- **Temperature, rooms and health.** During a heat wave or cold snap, read room temperatures with `get_environment` and pawns' heatstroke or hypothermia. Coolers need power and a conduit.
+- **Mood.** `lowMood` uses a fixed cutoff; `get_events` alerts name pawns at the game's own minor or major break risk.
+- **Stalled work.** Before changing priorities, ask why: `get_construction` separates missing or unusable material, obstacles builders clear themselves, and missing builders. A pawn's right-click menu (`list_pawn_actions`) gives the game's reason for a refused job, such as "Not enough food".
 
 The host starts and coordinates the agents. Prefer one watcher-driven run and shared evidence over repeated whole-map polling by each role. Reads and delegated orders can run while the clock is moving when the game permits them.
 
