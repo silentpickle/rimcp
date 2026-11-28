@@ -139,7 +139,7 @@ namespace RiMCP.Read
 
         private Rank AnimalRank(Pawn pawn)
         {
-            if (ColonyDangers.IsManhunter(pawn) || (pawn.RaceProps.predator && pawn.CurJobDef == JobDefOf.PredatorHunt && pawn.Faction != Faction.OfPlayer))
+            if (ColonyDangers.IsManhunter(pawn) || ColonyDangers.IsPredator(pawn))
             {
                 return Rank.AnimalThreat;
             }
