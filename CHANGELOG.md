@@ -16,6 +16,7 @@ All notable changes to this project are documented in this file.
 - `advance_time` stop conditions `breakRisk` (a pawn reaches extreme break risk) and `temperature` (heatstroke or hypothermia reaches the serious stage), both on by default.
 - `get_pawn` covers the inspector's tabs: `thoughts` lists every mood thought grouped as the Needs tab shows them, situational ones included; `relations` adds `opinions` both ways; `gear` adds frayed or tattered apparel and the safe and comfortable temperature ranges; the pawn gives its `backstory`, the work it can never do (`incapable`), and for a prisoner its interaction mode, resistance and will. Pawns at break risk carry their top mood penalties as `causes` in `list_threats` dangers and colony status.
 - `list_work` sweep rows mark `patient: true` for a pawn in bed rest and give its `breakRisk`. The digest's food gives `meals` and `raw` beside `stored`.
+- The getting-started guide adds lessons from the Tedshobrad heat wave: restrict every pawn and keep food they will eat inside the area, check cooler power connections and generator fuel, carry a downed pawn with Carry and Drop, why an order can wait behind a job the player cannot interrupt, and that wild prisoners are tamed rather than recruited.
 
 ### Changed
 
